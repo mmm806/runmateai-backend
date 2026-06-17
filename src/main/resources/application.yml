@@ -18,7 +18,8 @@ server:
 
 jwt:
   secret: runmateai-secret-key-please-change-this-in-production-must-be-long
-  expiration: 86400000
+  access-expiration: 1800000      # 30? (ms)
+  refresh-expiration: 1209600000  # 2? (ms)
 
 logging:
   level:
