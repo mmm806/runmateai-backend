@@ -37,6 +37,7 @@ out/
 .vscode/
 
 # 환경변수 파일
+application.yml
 application-secret.yml
 .env
 

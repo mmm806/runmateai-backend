@@ -30,7 +30,7 @@ public class UserProfile {
 	private Long id;
 
 	@OneToOne(fetch = FetchType.LAZY)
-	@JoinColumn(name = "uswer_id", nullable = false)
+	@JoinColumn(name = "user_id", nullable = false)
 	private User user;
 
 	@Column(name = "current_pace", nullable = false, length = 10)
