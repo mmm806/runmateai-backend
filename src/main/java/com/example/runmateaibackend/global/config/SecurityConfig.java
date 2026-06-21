@@ -18,6 +18,11 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.CorsConfigurationSource;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+
+import java.util.List;
 
 @Configuration
 @EnableWebSecurity
@@ -48,6 +53,7 @@ public class SecurityConfig {
 		http
 			// CSRF 비활성화 (JWT는 세션을 사용 안 하므로 불필요)
 			.csrf(csrf -> csrf.disable())
+			.cors(cors -> cors.configurationSource(corsConfigurationSource()))
 
 			// 세션을 사용하지 않음 (JWT는 무상태 방식)
 			.sessionManagement(session ->
@@ -70,6 +76,30 @@ public class SecurityConfig {
 			.addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class);
 
 		return http.build();
+	}
+
+	@Bean
+	public CorsConfigurationSource corsConfigurationSource() {
+		CorsConfiguration configuration = new CorsConfiguration();
+
+		// 프론트엔드 개발 서버 주소 허용
+		configuration.setAllowedOrigins(List.of(
+			"http://localhost:5173",
+			"http://localhost:5174"
+		));
+
+		// 허용할 HTTP 메서드
+		configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
+
+		// 허용할 헤더 (Authorization 포함 필수)
+		configuration.setAllowedHeaders(List.of("*"));
+
+		// 자격 증명(쿠키, Authorization 헤더 등) 허용
+		configuration.setAllowCredentials(true);
+
+		UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+		source.registerCorsConfiguration("/**", configuration);
+		return source;
 	}
 }
 
