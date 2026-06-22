@@ -56,4 +56,22 @@ public class UserProfileService {
 		return userRepository.findByEmail(email)
 			.orElseThrow(() -> new IllegalArgumentException("유저를 찾을 수 없습니다."));
 	}
+
+	// 프로필 수정
+	@Transactional
+	public void updateProfile(String email, ProfileRequest request) {
+
+		User user = findUserByEmail(email);
+
+		UserProfile profile = userProfileRepository.findByUser(user)
+			.orElseThrow(() -> new IllegalArgumentException("등록된 프로필이 없습니다."));
+
+		profile.update(
+			request.getCurrentPace(),
+			request.getWeeklyRuns(),
+			request.getGoalType(),
+			request.getTargetWeeks(),
+			request.getFitnessLevel()
+		);
+	}
 }

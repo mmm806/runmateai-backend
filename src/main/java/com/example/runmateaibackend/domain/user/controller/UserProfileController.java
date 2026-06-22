@@ -34,4 +34,15 @@ public class UserProfileController {
 		ProfileResponse response = userProfileService.getProfile(email);
 		return ResponseEntity.ok(response);
 	}
+
+	// 프로필 수정
+	@PutMapping
+	public ResponseEntity<String> updateProfile(
+		Authentication authentication,
+		@Valid @RequestBody ProfileRequest request
+	) {
+		String email = authentication.getName();
+		userProfileService.updateProfile(email, request);
+		return ResponseEntity.ok("프로필이 수정되었습니다.");
+	}
 }

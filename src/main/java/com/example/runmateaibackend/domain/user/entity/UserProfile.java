@@ -55,4 +55,12 @@ public class UserProfile {
 	protected void onCreate() {
 		this.createdAt = LocalDateTime.now();
 	}
+
+	public void update(String currentPace, int weeklyRuns, String goalType, int targetWeeks, String fitnessLevel) {
+		this.currentPace = currentPace;
+		this.weeklyRuns = weeklyRuns;
+		this.goalType = goalType;
+		this.targetWeeks = targetWeeks;
+		this.fitnessLevel = fitnessLevel;
+	}
 }

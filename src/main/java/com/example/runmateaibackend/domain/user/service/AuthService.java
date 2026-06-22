@@ -10,6 +10,7 @@ import com.example.runmateaibackend.domain.feedback.repository.FeedbackRepositor
 import com.example.runmateaibackend.domain.plan.repository.PlanRepository;
 import com.example.runmateaibackend.domain.record.repository.RecordRepository;
 import com.example.runmateaibackend.domain.user.dto.LoginRequest;
+import com.example.runmateaibackend.domain.user.dto.PasswordChangeRequest;
 import com.example.runmateaibackend.domain.user.dto.SignupRequest;
 import com.example.runmateaibackend.domain.user.dto.TokenResponse;
 import com.example.runmateaibackend.domain.user.entity.RefreshToken;
@@ -120,6 +121,23 @@ public class AuthService {
 
 		// 유저 삭제
 		userRepository.delete(user);
+	}
+
+	// 비밀번호 변경
+	@Transactional
+	public void changePassword(String email, PasswordChangeRequest request) {
+
+		User user = userRepository.findByEmail(email)
+			.orElseThrow(() -> new IllegalArgumentException("유저를 찾을 수 없습니다."));
+
+		// 현재 비밀번호 확인
+		if (!passwordEncoder.matches(request.getCurrentPassword(), user.getPassword())) {
+			throw new IllegalArgumentException("현재 비밀번호가 일치하지 않습니다.");
+		}
+
+		// 새 비밀번호 암호화 후 변경
+		String encodedNewPassword = passwordEncoder.encode(request.getNewPassword());
+		user.changePassword(encodedNewPassword);
 	}
 
 	// 토큰 재발급
