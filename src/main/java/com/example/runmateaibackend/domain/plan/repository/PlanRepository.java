@@ -15,4 +15,7 @@ public interface PlanRepository extends JpaRepository<TrainingPlan, Long> {
 
 	// 유저의 전체 플랜 목록 조회
 	List<TrainingPlan> findByUserOrderByCreatedAtDesc(User user);
+
+	// 유저 조회후 플랜 삭제
+	void deleteByUser(User user);
 }

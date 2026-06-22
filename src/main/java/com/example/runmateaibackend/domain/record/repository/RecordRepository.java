@@ -19,4 +19,7 @@ public interface RecordRepository extends JpaRepository<TrainingRecord, Long> {
 
 	// 유저의 최근 N개 기록 조회
 	List<TrainingRecord> findTop5ByUserOrderByRunDateDesc(User user);
+
+	// 유저 조회후 기록 삭제
+	void deleteByUser(User user);
 }

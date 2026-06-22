@@ -1,6 +1,8 @@
 package com.example.runmateaibackend.domain.user.controller;
 
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -33,6 +35,22 @@ public class AuthController {
 	public ResponseEntity<TokenResponse> login(@Valid @RequestBody LoginRequest request) {
 		TokenResponse tokenResponse = authService.login(request);
 		return ResponseEntity.ok(tokenResponse);
+	}
+
+	//로그아웃
+	@PostMapping("/logout")
+	public ResponseEntity<String> logout(Authentication authentication) {
+		String email = authentication.getName();
+		authService.logout(email);
+		return ResponseEntity.ok("로그아웃되었습니다.");
+	}
+
+	// 회원탈퇴
+	@DeleteMapping("/withdraw")
+	public ResponseEntity<String> withdraw(Authentication authentication) {
+		String email = authentication.getName();
+		authService.withdraw(email);
+		return ResponseEntity.ok("회원탈퇴가 완료되었습니다.");
 	}
 
 	// 토큰 재발급

@@ -6,12 +6,16 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.example.runmateaibackend.domain.feedback.repository.FeedbackRepository;
+import com.example.runmateaibackend.domain.plan.repository.PlanRepository;
+import com.example.runmateaibackend.domain.record.repository.RecordRepository;
 import com.example.runmateaibackend.domain.user.dto.LoginRequest;
 import com.example.runmateaibackend.domain.user.dto.SignupRequest;
 import com.example.runmateaibackend.domain.user.dto.TokenResponse;
 import com.example.runmateaibackend.domain.user.entity.RefreshToken;
 import com.example.runmateaibackend.domain.user.entity.User;
 import com.example.runmateaibackend.domain.user.repository.RefreshTokenRepository;
+import com.example.runmateaibackend.domain.user.repository.UserProfileRepository;
 import com.example.runmateaibackend.domain.user.repository.UserRepository;
 import com.example.runmateaibackend.global.jwt.JwtUtil;
 
@@ -22,6 +26,10 @@ import lombok.RequiredArgsConstructor;
 public class AuthService {
 
 	private final UserRepository userRepository;
+	private final FeedbackRepository feedbackRepository;
+	private final RecordRepository recordRepository;
+	private final PlanRepository planRepository;
+	private final UserProfileRepository userProfileRepository;
 	private final RefreshTokenRepository refreshTokenRepository;
 	private final PasswordEncoder passwordEncoder;
 	private final JwtUtil jwtUtil;
@@ -81,6 +89,37 @@ public class AuthService {
 			);
 		return new TokenResponse(accessToken, refreshToken);
 
+	}
+
+	// 로그아웃
+	@Transactional
+	public void logout(String email) {
+		User user = userRepository.findByEmail(email)
+			.orElseThrow(() -> new LayerInstantiationException("유저를 찾을 수 없습니다."));
+
+		// 저장된 리프레시 토큰 삭제(더이상 재발급 불가)
+		refreshTokenRepository.deleteByUser(user);
+	}
+
+	// 회원탈퇴
+	@Transactional
+	public void withdraw(String email) {
+
+		User user = userRepository.findByEmail(email)
+			.orElseThrow(() -> new IllegalArgumentException("유저를 찾을수 없습니다."));
+
+		// 자식 테이블부터 순서대로 삭제
+		feedbackRepository.deleteByUser(user);
+		recordRepository.deleteByUser(user);
+		planRepository.deleteByUser(user);
+
+		userProfileRepository.findByUser(user)
+			.ifPresent(userProfileRepository::delete);
+
+		refreshTokenRepository.deleteByUser(user);
+
+		// 유저 삭제
+		userRepository.delete(user);
 	}
 
 	// 토큰 재발급

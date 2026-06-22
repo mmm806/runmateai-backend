@@ -14,4 +14,7 @@ public interface FeedbackRepository extends JpaRepository<AiFeedback, Long> {
 
 	// 특정 기록의 피드백 조회
 	List<AiFeedback> findByTrainingRecordId(Long recordId);
+
+	// 유저 조회후 피드백 삭제
+	void deleteByUser(User user);
 }
