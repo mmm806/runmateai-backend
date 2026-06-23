@@ -11,6 +11,9 @@ import com.example.runmateaibackend.domain.record.repository.RecordRepository;
 import com.example.runmateaibackend.domain.user.entity.User;
 import com.example.runmateaibackend.domain.user.repository.UserRepository;
 import com.example.runmateaibackend.global.client.ClaudeApiClient;
+
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
 import lombok.RequiredArgsConstructor;
 import tools.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Service;
@@ -22,6 +25,8 @@ import java.util.List;
 @RequiredArgsConstructor
 public class FeedbackService {
 
+	@PersistenceContext
+	private EntityManager entityManager;
 	private final UserRepository userRepository;
 	private final RecordRepository recordRepository;
 	private final PlanRepository planRepository;
@@ -57,7 +62,10 @@ public class FeedbackService {
 		if (result.isPlanUpdateNeeded() && result.getUpdatedPlanData() != null) {
 
 			activePlan.deactivate();
+			planRepository.save(activePlan);
+			entityManager.flush();  // ← 즉시 DB에 UPDATE 반영시키기
 
+			// 그 다음에 새 플랜 생성
 			String updatedPlanDataJson;
 			try {
 				updatedPlanDataJson = objectMapper.writeValueAsString(result.getUpdatedPlanData());

@@ -8,13 +8,19 @@ import com.example.runmateaibackend.domain.user.entity.UserProfile;
 import com.example.runmateaibackend.domain.user.repository.UserProfileRepository;
 import com.example.runmateaibackend.domain.user.repository.UserRepository;
 import com.example.runmateaibackend.global.client.ClaudeApiClient;
+
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+
 @Service
 @RequiredArgsConstructor
 public class PlanService {
+	@PersistenceContext
+	private EntityManager entityManager;
 
 	private final UserRepository userRepository;
 	private final UserProfileRepository userProfileRepository;
@@ -34,7 +40,12 @@ public class PlanService {
 
 		// 기존 활성 플랜 비활성화
 		planRepository.findByUserAndIsActive(user, true)
-			.ifPresent(TrainingPlan::deactivate);
+			.ifPresent(existingPlan -> {
+				existingPlan.deactivate();
+				planRepository.save(existingPlan);
+			});
+
+		entityManager.flush();
 
 		// 프롬프트 생성 후 Claude API 호출
 		String prompt = planPromptBuilder.build(profile);
