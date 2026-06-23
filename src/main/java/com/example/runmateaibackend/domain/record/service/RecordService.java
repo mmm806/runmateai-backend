@@ -1,5 +1,7 @@
 package com.example.runmateaibackend.domain.record.service;
 
+import com.example.runmateaibackend.domain.feedback.entity.AiFeedback;
+import com.example.runmateaibackend.domain.feedback.repository.FeedbackRepository;
 import com.example.runmateaibackend.domain.plan.entity.TrainingPlan;
 import com.example.runmateaibackend.domain.plan.repository.PlanRepository;
 import com.example.runmateaibackend.domain.record.dto.RecordRequest;
@@ -22,6 +24,7 @@ public class RecordService {
 	private final UserRepository userRepository;
 	private final PlanRepository planRepository;
 	private final RecordRepository recordRepository;
+	private final FeedbackRepository feedbackRepository;
 
 	// 러닝 기록 등록
 	@Transactional
@@ -127,7 +130,47 @@ public class RecordService {
 			throw new IllegalArgumentException("본인의 기록만 삭제할 수 있습니다.");
 		}
 
+		// 이 기록에 연결된 피드백 조회 (보통 1개)
+		List<AiFeedback> relatedFeedbacks = feedbackRepository.findByTrainingRecordId(recordId);
+
+		boolean wasPlanUpdatedByThisRecord = relatedFeedbacks.stream()
+			.anyMatch(AiFeedback::isPlanUpdated);
+
+		// 연관 피드백 삭제
+		feedbackRepository.deleteByTrainingRecord(record);
+
+		// 기록 삭제
 		recordRepository.delete(record);
+
+		// 이 기록이 플랜을 조정했었다면, 되돌리기 로직 수행
+		if (wasPlanUpdatedByThisRecord) {
+			revertToLatestPlanUpdate(user);
+		}
+	}
+
+	private void revertToLatestPlanUpdate(User user) {
+
+		// 현재 활성 플랜 비활성화
+		planRepository.findByUserAndIsActive(user, true)
+			.ifPresent(TrainingPlan::deactivate);
+
+		// 남은 피드백 중 가장 최근 것부터 확인, planUpdated=true인 걸 찾을 때까지
+		List<AiFeedback> feedbacks = feedbackRepository.findByUserOrderByCreatedAtDesc(user);
+
+		AiFeedback latestPlanUpdateFeedback = feedbacks.stream()
+			.filter(AiFeedback::isPlanUpdated)
+			.findFirst()
+			.orElse(null);
+
+		if (latestPlanUpdateFeedback != null) {
+			// 그 피드백이 만들었던 플랜을 다시 활성화
+			TrainingPlan planToReactivate = latestPlanUpdateFeedback.getTrainingPlan();
+			planToReactivate.activate();
+		} else {
+			// 조정 이력이 전혀 없으면, 가장 처음 만들어진 플랜을 활성화
+			planRepository.findFirstByUserOrderByCreatedAtAsc(user)
+				.ifPresent(TrainingPlan::activate);
+		}
 	}
 
 	private User findUserByEmail(String email) {

@@ -18,4 +18,7 @@ public interface PlanRepository extends JpaRepository<TrainingPlan, Long> {
 
 	// 유저 조회후 플랜 삭제
 	void deleteByUser(User user);
+
+
+	Optional<TrainingPlan> findFirstByUserOrderByCreatedAtAsc(User user);
 }

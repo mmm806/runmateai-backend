@@ -5,6 +5,7 @@ import java.util.List;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import com.example.runmateaibackend.domain.feedback.entity.AiFeedback;
+import com.example.runmateaibackend.domain.record.entity.TrainingRecord;
 import com.example.runmateaibackend.domain.user.entity.User;
 
 public interface FeedbackRepository extends JpaRepository<AiFeedback, Long> {
@@ -17,4 +18,6 @@ public interface FeedbackRepository extends JpaRepository<AiFeedback, Long> {
 
 	// 유저 조회후 피드백 삭제
 	void deleteByUser(User user);
+
+	void deleteByTrainingRecord(TrainingRecord trainingRecord);
 }

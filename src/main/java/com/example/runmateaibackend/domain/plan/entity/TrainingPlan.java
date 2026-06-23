@@ -62,4 +62,8 @@ public class TrainingPlan {
 		this.isActive = false;
 	}
 
+	public void activate() {
+		this.isActive = true;
+	}
+
 }
