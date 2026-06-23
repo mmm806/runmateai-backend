@@ -1,5 +1,6 @@
 package com.example.runmateaibackend.domain.feedback.service;
 
+import com.example.runmateaibackend.domain.feedback.dto.AiFeedbackResult;
 import com.example.runmateaibackend.domain.feedback.dto.FeedbackResponse;
 import com.example.runmateaibackend.domain.feedback.entity.AiFeedback;
 import com.example.runmateaibackend.domain.feedback.repository.FeedbackRepository;
@@ -11,6 +12,7 @@ import com.example.runmateaibackend.domain.user.entity.User;
 import com.example.runmateaibackend.domain.user.repository.UserRepository;
 import com.example.runmateaibackend.global.client.ClaudeApiClient;
 import lombok.RequiredArgsConstructor;
+import tools.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -26,6 +28,7 @@ public class FeedbackService {
 	private final FeedbackRepository feedbackRepository;
 	private final ClaudeApiClient claudeApiClient;
 	private final FeedbackPromptBuilder feedbackPromptBuilder;
+	private final ObjectMapper objectMapper = new ObjectMapper();
 
 	@Transactional
 	public FeedbackResponse createFeedback(String email, Long recordId) {
@@ -33,27 +36,52 @@ public class FeedbackService {
 		User user = userRepository.findByEmail(email)
 			.orElseThrow(() -> new IllegalArgumentException("유저를 찾을 수 없습니다."));
 
-		// 피드백 대상 기록 조회
 		TrainingRecord targetRecord = recordRepository.findById(recordId)
 			.orElseThrow(() -> new IllegalArgumentException("기록을 찾을 수 없습니다."));
 
-		// 최근 기록 5개 조회 (추세 분석용)
 		List<TrainingRecord> recentRecords = recordRepository.findTop5ByUserOrderByRunDateDesc(user);
 
-		// 프롬프트 생성 후 Claude API 호출
-		String prompt = feedbackPromptBuilder.build(targetRecord, recentRecords);
-		String feedbackContent = claudeApiClient.sendMessage(prompt);
-
-		// 현재 활성 플랜 조회 (피드백과 연결)
 		TrainingPlan activePlan = planRepository.findByUserAndIsActive(user, true)
 			.orElseThrow(() -> new IllegalArgumentException("활성화된 플랜이 없습니다."));
+
+		// 프롬프트 생성 (현재 플랜 포함) 후 Claude API 호출 + JSON 파싱
+		String prompt = feedbackPromptBuilder.build(targetRecord, recentRecords, activePlan);
+		AiFeedbackResult result = claudeApiClient.sendMessageAndParse(prompt, AiFeedbackResult.class);
+
+		TrainingPlan finalPlan = activePlan;
+
+		// AI가 플랜 조정이 필요하다고 판단한 경우
+		if (result.isPlanUpdateNeeded() && result.getUpdatedPlanData() != null) {
+
+			// 기존 플랜 비활성화
+			activePlan.deactivate();
+
+			// 새 plan_data를 JSON 문자열로 변환
+			String updatedPlanDataJson;
+			try {
+				updatedPlanDataJson = objectMapper.writeValueAsString(result.getUpdatedPlanData());
+			} catch (Exception e) {
+				throw new IllegalStateException("플랜 데이터 변환 실패: " + e.getMessage());
+			}
+
+			// 새 플랜 생성 (조정된 내용으로)
+			TrainingPlan newPlan = TrainingPlan.builder()
+				.user(user)
+				.planData(updatedPlanDataJson)
+				.goalType(activePlan.getGoalType())
+				.isActive(true)
+				.build();
+
+			planRepository.save(newPlan);
+			finalPlan = newPlan;
+		}
 
 		AiFeedback feedback = AiFeedback.builder()
 			.user(user)
 			.trainingRecord(targetRecord)
-			.trainingPlan(activePlan)
-			.feedbackContent(feedbackContent)
-			.planUpdated(false)
+			.trainingPlan(finalPlan)
+			.feedbackContent(result.getFeedback())
+			.planUpdated(result.isPlanUpdateNeeded())
 			.build();
 
 		feedbackRepository.save(feedback);
@@ -61,7 +89,6 @@ public class FeedbackService {
 		return new FeedbackResponse(feedback);
 	}
 
-	// 전체 피드백 조회
 	public List<FeedbackResponse> getFeedbacks(String email) {
 
 		User user = userRepository.findByEmail(email)
