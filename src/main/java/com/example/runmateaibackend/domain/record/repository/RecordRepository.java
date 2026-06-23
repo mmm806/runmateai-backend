@@ -22,4 +22,8 @@ public interface RecordRepository extends JpaRepository<TrainingRecord, Long> {
 
 	// 유저 조회후 기록 삭제
 	void deleteByUser(User user);
+
+	List<TrainingRecord> findByUser(User user);
+
+	long countByUser(User user);
 }

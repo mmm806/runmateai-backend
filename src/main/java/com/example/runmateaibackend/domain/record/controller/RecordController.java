@@ -2,6 +2,7 @@ package com.example.runmateaibackend.domain.record.controller;
 
 import com.example.runmateaibackend.domain.record.dto.RecordRequest;
 import com.example.runmateaibackend.domain.record.dto.RecordResponse;
+import com.example.runmateaibackend.domain.record.dto.RecordStatsResponse;
 import com.example.runmateaibackend.domain.record.service.RecordService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -69,5 +70,12 @@ public class RecordController {
 		String email = authentication.getName();
 		recordService.deleteRecord(email, recordId);
 		return ResponseEntity.ok("기록이 삭제되었습니다.");
+	}
+
+	@GetMapping("/stats")
+	public ResponseEntity<RecordStatsResponse> getStats(Authentication authentication) {
+		String email = authentication.getName();
+		RecordStatsResponse response = recordService.getStats(email);
+		return ResponseEntity.ok(response);
 	}
 }
