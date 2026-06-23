@@ -78,6 +78,58 @@ public class RecordService {
 		return new RecordResponse(record);
 	}
 
+	// 기록 수정
+	@Transactional
+	public RecordResponse updateRecord(String email, Long recordId, RecordRequest request) {
+
+		User user = findUserByEmail(email);
+
+		TrainingRecord record = recordRepository.findById(recordId)
+			.orElseThrow(() -> new IllegalArgumentException("기록을 찾을 수 없습니다."));
+
+		// 본인 기록인지 확인 (다른 유저 기록을 수정하지 못하게)
+		if (!record.getUser().getId().equals(user.getId())) {
+			throw new IllegalArgumentException("본인의 기록만 수정할 수 있습니다.");
+		}
+
+		// 날짜를 변경하는 경우, 변경하려는 날짜에 이미 다른 기록이 있는지 확인
+		if (!record.getRunDate().equals(request.getRunDate())) {
+			recordRepository.findByUserAndRunDate(user, request.getRunDate())
+				.ifPresent(existing -> {
+					throw new IllegalArgumentException("해당 날짜에 이미 다른 기록이 존재합니다.");
+				});
+		}
+
+		record.update(
+			request.getRunDate(),
+			request.getDistanceKm(),
+			request.getDurationMin(),
+			request.getAvgPace(),
+			request.getAvgHeartRate(),
+			request.getCalories(),
+			request.getFeeling(),
+			request.getNote()
+		);
+
+		return new RecordResponse(record);
+	}
+
+	// 기록 삭제
+	@Transactional
+	public void deleteRecord(String email, Long recordId) {
+
+		User user = findUserByEmail(email);
+
+		TrainingRecord record = recordRepository.findById(recordId)
+			.orElseThrow(() -> new IllegalArgumentException("기록을 찾을 수 없습니다."));
+
+		if (!record.getUser().getId().equals(user.getId())) {
+			throw new IllegalArgumentException("본인의 기록만 삭제할 수 있습니다.");
+		}
+
+		recordRepository.delete(record);
+	}
+
 	private User findUserByEmail(String email) {
 		return userRepository.findByEmail(email)
 			.orElseThrow(() -> new IllegalArgumentException("유저를 찾을 수 없습니다."));

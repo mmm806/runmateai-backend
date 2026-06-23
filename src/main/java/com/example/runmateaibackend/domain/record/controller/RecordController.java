@@ -49,4 +49,25 @@ public class RecordController {
 		RecordResponse response = recordService.getRecordByDate(email, date);
 		return ResponseEntity.ok(response);
 	}
+
+	@PutMapping("/{recordId}")
+	public ResponseEntity<RecordResponse> updateRecord(
+		Authentication authentication,
+		@PathVariable Long recordId,
+		@Valid @RequestBody RecordRequest request
+	) {
+		String email = authentication.getName();
+		RecordResponse response = recordService.updateRecord(email, recordId, request);
+		return ResponseEntity.ok(response);
+	}
+
+	@DeleteMapping("/{recordId}")
+	public ResponseEntity<String> deleteRecord(
+		Authentication authentication,
+		@PathVariable Long recordId
+	) {
+		String email = authentication.getName();
+		recordService.deleteRecord(email, recordId);
+		return ResponseEntity.ok("기록이 삭제되었습니다.");
+	}
 }

@@ -60,4 +60,17 @@ public class TrainingRecord {
 	protected void onCreate() {
 		this.createdAt = LocalDateTime.now();
 	}
+
+	public void update(LocalDate runDate, BigDecimal distanceKm, int durationMin,
+		String avgPace, Integer avgHeartRate, Integer calories,
+		String feeling, String note) {
+		this.runDate = runDate;
+		this.distanceKm = distanceKm;
+		this.durationMin = durationMin;
+		this.avgPace = avgPace;
+		this.avgHeartRate = avgHeartRate;
+		this.calories = calories;
+		this.feeling = feeling;
+		this.note = note;
+	}
 }
