@@ -3,6 +3,7 @@ package com.example.runmateaibackend.domain.user.controller;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -13,6 +14,7 @@ import com.example.runmateaibackend.domain.user.dto.LoginRequest;
 import com.example.runmateaibackend.domain.user.dto.PasswordChangeRequest;
 import com.example.runmateaibackend.domain.user.dto.SignupRequest;
 import com.example.runmateaibackend.domain.user.dto.TokenResponse;
+import com.example.runmateaibackend.domain.user.dto.UserInfoResponse;
 import com.example.runmateaibackend.domain.user.service.AuthService;
 
 import jakarta.validation.Valid;
@@ -64,6 +66,13 @@ public class AuthController {
 		String email = authentication.getName();
 		authService.changePassword(email, request);
 		return ResponseEntity.ok("비밀번호가 변경되었습니다.");
+	}
+
+	@GetMapping("/me")
+	public ResponseEntity<UserInfoResponse> getMyInfo(Authentication authentication) {
+		String email = authentication.getName();
+		UserInfoResponse response = authService.getMyInfo(email);
+		return ResponseEntity.ok(response);
 	}
 
 	// 토큰 재발급

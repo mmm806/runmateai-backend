@@ -18,6 +18,7 @@ public class RecordResponse {
 	private Integer calories;
 	private String feeling;
 	private String note;
+	private Integer elevationGain;
 
 	public RecordResponse(TrainingRecord record) {
 		this.id = record.getId();
@@ -29,5 +30,6 @@ public class RecordResponse {
 		this.calories = record.getCalories();
 		this.feeling = record.getFeeling();
 		this.note = record.getNote();
+		this.elevationGain = record.getElevationGain();
 	}
 }

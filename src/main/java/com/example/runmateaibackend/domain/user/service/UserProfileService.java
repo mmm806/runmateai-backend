@@ -17,30 +17,28 @@ public class UserProfileService {
 	private final UserRepository userRepository;
 	private final UserProfileRepository userProfileRepository;
 
-	// 프로필 등록
 	@Transactional
 	public void createProfile(String email, ProfileRequest request) {
 
 		User user = findUserByEmail(email);
 
-		// 이미 프로필이 있으면 예외 처리
 		if (userProfileRepository.findByUser(user).isPresent()) {
 			throw new IllegalArgumentException("이미 프로필이 등록되어 있습니다.");
 		}
 
 		UserProfile profile = UserProfile.builder()
 			.user(user)
-			.currentPace(request.getCurrentPace())
-			.weeklyRuns(request.getWeeklyRuns())
+			.targetPace(request.getTargetPace())
+			.targetWeeklyRuns(request.getTargetWeeklyRuns())
 			.goalType(request.getGoalType())
 			.targetWeeks(request.getTargetWeeks())
 			.fitnessLevel(request.getFitnessLevel())
+			.monthlyGoalKm(request.getMonthlyGoalKm())
 			.build();
 
 		userProfileRepository.save(profile);
 	}
 
-	// 프로필 조회
 	public ProfileResponse getProfile(String email) {
 
 		User user = findUserByEmail(email);
@@ -51,13 +49,6 @@ public class UserProfileService {
 		return new ProfileResponse(profile);
 	}
 
-	// 이메일로 유저 조회 (내부 공통 메서드)
-	private User findUserByEmail(String email) {
-		return userRepository.findByEmail(email)
-			.orElseThrow(() -> new IllegalArgumentException("유저를 찾을 수 없습니다."));
-	}
-
-	// 프로필 수정
 	@Transactional
 	public void updateProfile(String email, ProfileRequest request) {
 
@@ -67,11 +58,17 @@ public class UserProfileService {
 			.orElseThrow(() -> new IllegalArgumentException("등록된 프로필이 없습니다."));
 
 		profile.update(
-			request.getCurrentPace(),
-			request.getWeeklyRuns(),
+			request.getTargetPace(),
+			request.getTargetWeeklyRuns(),
 			request.getGoalType(),
 			request.getTargetWeeks(),
-			request.getFitnessLevel()
+			request.getFitnessLevel(),
+			request.getMonthlyGoalKm()
 		);
+	}
+
+	private User findUserByEmail(String email) {
+		return userRepository.findByEmail(email)
+			.orElseThrow(() -> new IllegalArgumentException("유저를 찾을 수 없습니다."));
 	}
 }

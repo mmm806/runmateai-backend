@@ -13,6 +13,7 @@ import com.example.runmateaibackend.domain.user.dto.LoginRequest;
 import com.example.runmateaibackend.domain.user.dto.PasswordChangeRequest;
 import com.example.runmateaibackend.domain.user.dto.SignupRequest;
 import com.example.runmateaibackend.domain.user.dto.TokenResponse;
+import com.example.runmateaibackend.domain.user.dto.UserInfoResponse;
 import com.example.runmateaibackend.domain.user.entity.RefreshToken;
 import com.example.runmateaibackend.domain.user.entity.User;
 import com.example.runmateaibackend.domain.user.repository.RefreshTokenRepository;
@@ -138,6 +139,13 @@ public class AuthService {
 		// 새 비밀번호 암호화 후 변경
 		String encodedNewPassword = passwordEncoder.encode(request.getNewPassword());
 		user.changePassword(encodedNewPassword);
+	}
+
+	@Transactional
+	public UserInfoResponse getMyInfo(String email) {
+		User user = userRepository.findByEmail(email)
+			.orElseThrow(() -> new IllegalArgumentException("유저를 찾을 수 없습니다."));
+		return new UserInfoResponse(user);
 	}
 
 	// 토큰 재발급

@@ -25,11 +25,13 @@ public class RecordRequest {
 	@NotBlank(message = "평균 페이스는 필수입니다.")
 	private String avgPace;
 
-	private Integer avgHeartRate; // 선택
+	private Integer avgHeartRate;
 
-	private Integer calories; // 선택
+	private Integer calories;
 
-	private String feeling; // 선택 (great/good/normal/bad)
+	private String feeling;
 
-	private String note; // 선택
+	private String note;
+
+	private Integer elevationGain; // 선택 입력, 미터 단위
 }

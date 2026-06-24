@@ -1,13 +1,12 @@
 package com.example.runmateaibackend.domain.record.entity;
 
+import com.example.runmateaibackend.domain.plan.entity.TrainingPlan;
+import com.example.runmateaibackend.domain.user.entity.User;
 import jakarta.persistence.*;
 import lombok.*;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-
-import com.example.runmateaibackend.domain.plan.entity.TrainingPlan;
-import com.example.runmateaibackend.domain.user.entity.User;
 
 @Entity
 @Table(name = "training_records")
@@ -53,6 +52,9 @@ public class TrainingRecord {
 	@Column(name = "note", length = 500)
 	private String note;
 
+	@Column(name = "elevation_gain")
+	private Integer elevationGain; // 미터(m) 단위, 선택 입력
+
 	@Column(name = "created_at", nullable = false, updatable = false)
 	private LocalDateTime createdAt;
 
@@ -63,7 +65,7 @@ public class TrainingRecord {
 
 	public void update(LocalDate runDate, BigDecimal distanceKm, int durationMin,
 		String avgPace, Integer avgHeartRate, Integer calories,
-		String feeling, String note) {
+		String feeling, String note, Integer elevationGain) {
 		this.runDate = runDate;
 		this.distanceKm = distanceKm;
 		this.durationMin = durationMin;
@@ -72,5 +74,6 @@ public class TrainingRecord {
 		this.calories = calories;
 		this.feeling = feeling;
 		this.note = note;
+		this.elevationGain = elevationGain;
 	}
 }

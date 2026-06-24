@@ -2,6 +2,7 @@ package com.example.runmateaibackend.domain.plan.controller;
 
 import com.example.runmateaibackend.domain.plan.dto.PlanResponse;
 import com.example.runmateaibackend.domain.plan.service.PlanService;
+
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;

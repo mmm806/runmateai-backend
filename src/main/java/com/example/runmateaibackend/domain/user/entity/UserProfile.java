@@ -1,26 +1,14 @@
 package com.example.runmateaibackend.domain.user.entity;
 
+import jakarta.persistence.*;
+import lombok.*;
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
-
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.FetchType;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
-import jakarta.persistence.JoinColumn;
-import jakarta.persistence.OneToOne;
-import jakarta.persistence.PrePersist;
-import jakarta.persistence.Table;
-import lombok.AllArgsConstructor;
-import lombok.Builder;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
 
 @Entity
 @Table(name = "user_profiles")
 @Getter
-@NoArgsConstructor
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
 @Builder
 @AllArgsConstructor
 public class UserProfile {
@@ -33,11 +21,11 @@ public class UserProfile {
 	@JoinColumn(name = "user_id", nullable = false)
 	private User user;
 
-	@Column(name = "current_pace", nullable = false, length = 10)
-	private String currentPace;
+	@Column(name = "target_pace", nullable = false, length = 10)
+	private String targetPace;
 
-	@Column(name = "weekly_runs", nullable = false)
-	private int weeklyRuns;
+	@Column(name = "target_weekly_runs", nullable = false)
+	private int targetWeeklyRuns;
 
 	@Column(name = "goal_type", nullable = false, length = 20)
 	private String goalType;
@@ -48,6 +36,9 @@ public class UserProfile {
 	@Column(name = "fitness_level", nullable = false, length = 20)
 	private String fitnessLevel;
 
+	@Column(name = "monthly_goal_km", precision = 5, scale = 2)
+	private BigDecimal monthlyGoalKm; // 선택 입력, null 가능
+
 	@Column(name = "created_at", nullable = false, updatable = false)
 	private LocalDateTime createdAt;
 
@@ -56,11 +47,13 @@ public class UserProfile {
 		this.createdAt = LocalDateTime.now();
 	}
 
-	public void update(String currentPace, int weeklyRuns, String goalType, int targetWeeks, String fitnessLevel) {
-		this.currentPace = currentPace;
-		this.weeklyRuns = weeklyRuns;
+	public void update(String targetPace, int targetWeeklyRuns, String goalType,
+		int targetWeeks, String fitnessLevel, BigDecimal monthlyGoalKm) {
+		this.targetPace = targetPace;
+		this.targetWeeklyRuns = targetWeeklyRuns;
 		this.goalType = goalType;
 		this.targetWeeks = targetWeeks;
 		this.fitnessLevel = fitnessLevel;
+		this.monthlyGoalKm = monthlyGoalKm;
 	}
 }

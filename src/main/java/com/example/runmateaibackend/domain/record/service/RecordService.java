@@ -4,24 +4,23 @@ import com.example.runmateaibackend.domain.feedback.entity.AiFeedback;
 import com.example.runmateaibackend.domain.feedback.repository.FeedbackRepository;
 import com.example.runmateaibackend.domain.plan.entity.TrainingPlan;
 import com.example.runmateaibackend.domain.plan.repository.PlanRepository;
-import com.example.runmateaibackend.domain.record.dto.RecordRequest;
-import com.example.runmateaibackend.domain.record.dto.RecordResponse;
-import com.example.runmateaibackend.domain.record.dto.RecordStatsResponse;
+import com.example.runmateaibackend.domain.record.dto.*;
 import com.example.runmateaibackend.domain.record.entity.TrainingRecord;
 import com.example.runmateaibackend.domain.record.repository.RecordRepository;
 import com.example.runmateaibackend.domain.user.entity.User;
+import com.example.runmateaibackend.domain.user.entity.UserProfile;
+import com.example.runmateaibackend.domain.user.repository.UserProfileRepository;
 import com.example.runmateaibackend.domain.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDate;
+import java.time.YearMonth;
 import java.time.temporal.ChronoUnit;
-import java.util.Comparator;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 @Service
 @RequiredArgsConstructor
@@ -31,19 +30,17 @@ public class RecordService {
 	private final PlanRepository planRepository;
 	private final RecordRepository recordRepository;
 	private final FeedbackRepository feedbackRepository;
+	private final UserProfileRepository userProfileRepository;
 
-	// 러닝 기록 등록
 	@Transactional
 	public RecordResponse createRecord(String email, RecordRequest request) {
 
 		User user = findUserByEmail(email);
 
-		// 같은 날짜에 이미 기록이 있는지 확인
 		if (recordRepository.findByUserAndRunDate(user, request.getRunDate()).isPresent()) {
 			throw new IllegalArgumentException("해당 날짜에 이미 기록이 존재합니다.");
 		}
 
-		// 현재 활성 플랜 연결 (없으면 null)
 		TrainingPlan activePlan = planRepository.findByUserAndIsActive(user, true)
 			.orElse(null);
 
@@ -58,6 +55,7 @@ public class RecordService {
 			.calories(request.getCalories())
 			.feeling(request.getFeeling())
 			.note(request.getNote())
+			.elevationGain(request.getElevationGain())
 			.build();
 
 		recordRepository.save(record);
@@ -65,7 +63,6 @@ public class RecordService {
 		return new RecordResponse(record);
 	}
 
-	// 전체 기록 조회 (최신순)
 	public List<RecordResponse> getRecords(String email) {
 
 		User user = findUserByEmail(email);
@@ -76,7 +73,6 @@ public class RecordService {
 			.toList();
 	}
 
-	// 특정 날짜 기록 조회
 	public RecordResponse getRecordByDate(String email, LocalDate date) {
 
 		User user = findUserByEmail(email);
@@ -87,7 +83,6 @@ public class RecordService {
 		return new RecordResponse(record);
 	}
 
-	// 기록 수정
 	@Transactional
 	public RecordResponse updateRecord(String email, Long recordId, RecordRequest request) {
 
@@ -96,12 +91,10 @@ public class RecordService {
 		TrainingRecord record = recordRepository.findById(recordId)
 			.orElseThrow(() -> new IllegalArgumentException("기록을 찾을 수 없습니다."));
 
-		// 본인 기록인지 확인 (다른 유저 기록을 수정하지 못하게)
 		if (!record.getUser().getId().equals(user.getId())) {
 			throw new IllegalArgumentException("본인의 기록만 수정할 수 있습니다.");
 		}
 
-		// 날짜를 변경하는 경우, 변경하려는 날짜에 이미 다른 기록이 있는지 확인
 		if (!record.getRunDate().equals(request.getRunDate())) {
 			recordRepository.findByUserAndRunDate(user, request.getRunDate())
 				.ifPresent(existing -> {
@@ -117,13 +110,13 @@ public class RecordService {
 			request.getAvgHeartRate(),
 			request.getCalories(),
 			request.getFeeling(),
-			request.getNote()
+			request.getNote(),
+			request.getElevationGain()
 		);
 
 		return new RecordResponse(record);
 	}
 
-	// 기록 삭제
 	@Transactional
 	public void deleteRecord(String email, Long recordId) {
 
@@ -136,19 +129,13 @@ public class RecordService {
 			throw new IllegalArgumentException("본인의 기록만 삭제할 수 있습니다.");
 		}
 
-		// 이 기록에 연결된 피드백 조회 (보통 1개)
 		List<AiFeedback> relatedFeedbacks = feedbackRepository.findByTrainingRecordId(recordId);
-
 		boolean wasPlanUpdatedByThisRecord = relatedFeedbacks.stream()
 			.anyMatch(AiFeedback::isPlanUpdated);
 
-		// 연관 피드백 삭제
 		feedbackRepository.deleteByTrainingRecord(record);
-
-		// 기록 삭제
 		recordRepository.delete(record);
 
-		// 이 기록이 플랜을 조정했었다면, 되돌리기 로직 수행
 		if (wasPlanUpdatedByThisRecord) {
 			revertToLatestPlanUpdate(user);
 		}
@@ -156,11 +143,9 @@ public class RecordService {
 
 	private void revertToLatestPlanUpdate(User user) {
 
-		// 현재 활성 플랜 비활성화
 		planRepository.findByUserAndIsActive(user, true)
 			.ifPresent(TrainingPlan::deactivate);
 
-		// 남은 피드백 중 가장 최근 것부터 확인, planUpdated=true인 걸 찾을 때까지
 		List<AiFeedback> feedbacks = feedbackRepository.findByUserOrderByCreatedAtDesc(user);
 
 		AiFeedback latestPlanUpdateFeedback = feedbacks.stream()
@@ -169,11 +154,9 @@ public class RecordService {
 			.orElse(null);
 
 		if (latestPlanUpdateFeedback != null) {
-			// 그 피드백이 만들었던 플랜을 다시 활성화
 			TrainingPlan planToReactivate = latestPlanUpdateFeedback.getTrainingPlan();
 			planToReactivate.activate();
 		} else {
-			// 조정 이력이 전혀 없으면, 가장 처음 만들어진 플랜을 활성화
 			planRepository.findFirstByUserOrderByCreatedAtAsc(user)
 				.ifPresent(TrainingPlan::activate);
 		}
@@ -189,29 +172,23 @@ public class RecordService {
 			throw new IllegalArgumentException("러닝 기록이 없습니다.");
 		}
 
-		// 총 횟수
 		int totalRuns = records.size();
 
-		// 총 누적 거리
 		BigDecimal totalDistance = records.stream()
 			.map(TrainingRecord::getDistanceKm)
 			.reduce(BigDecimal.ZERO, BigDecimal::add);
 
-		// 총 누적 시간
 		int totalDuration = records.stream()
 			.mapToInt(TrainingRecord::getDurationMin)
 			.sum();
 
-		// 평균 페이스 (전체 시간 / 전체 거리로 재계산)
 		String avgPace = calculatePace(totalDuration, totalDistance);
 
-		// 최장 거리
 		BigDecimal longestDistance = records.stream()
 			.map(TrainingRecord::getDistanceKm)
 			.max(BigDecimal::compareTo)
 			.orElse(BigDecimal.ZERO);
 
-		// 최고 페이스 (분/km가 가장 작은 것 = 가장 빠른 것)
 		String bestPace = records.stream()
 			.min((r1, r2) -> Double.compare(
 				paceToMinutesPerKm(r1.getDurationMin(), r1.getDistanceKm()),
@@ -220,45 +197,136 @@ public class RecordService {
 			.map(r -> calculatePace(r.getDurationMin(), r.getDistanceKm()))
 			.orElse("-");
 
-		// 최장 시간
 		int longestDuration = records.stream()
 			.mapToInt(TrainingRecord::getDurationMin)
 			.max()
 			.orElse(0);
 
-		// 연속 기록일 계산
 		int[] streaks = calculateStreaks(records);
 		int currentStreak = streaks[0];
 		int longestStreak = streaks[1];
 
-		// 컨디션 분포
 		Map<String, Integer> feelingDistribution = new HashMap<>();
 		for (TrainingRecord record : records) {
 			String feeling = record.getFeeling() != null ? record.getFeeling() : "unknown";
 			feelingDistribution.merge(feeling, 1, Integer::sum);
 		}
 
-		// AI 플랜 조정 횟수
 		int totalPlanUpdates = (int) feedbackRepository.findByUserOrderByCreatedAtDesc(user)
 			.stream()
 			.filter(AiFeedback::isPlanUpdated)
 			.count();
 
+		// --- 새로 추가된 통계 ---
+
+		YearMonth thisMonth = YearMonth.now();
+		YearMonth lastMonth = thisMonth.minusMonths(1);
+
+		BigDecimal thisMonthDistance = sumDistanceForMonth(records, thisMonth);
+		BigDecimal lastMonthDistance = sumDistanceForMonth(records, lastMonth);
+
+		Double distanceChangePercent = null;
+		if (lastMonthDistance.compareTo(BigDecimal.ZERO) > 0) {
+			distanceChangePercent = thisMonthDistance.subtract(lastMonthDistance)
+				.divide(lastMonthDistance, 4, RoundingMode.HALF_UP)
+				.multiply(BigDecimal.valueOf(100))
+				.doubleValue();
+		}
+
+		List<Integer> heartRates = records.stream()
+			.map(TrainingRecord::getAvgHeartRate)
+			.filter(Objects::nonNull)
+			.toList();
+		Integer avgHeartRate = heartRates.isEmpty() ? null :
+			(int) heartRates.stream().mapToInt(Integer::intValue).average().orElse(0);
+
+		List<Integer> caloriesList = records.stream()
+			.map(TrainingRecord::getCalories)
+			.filter(Objects::nonNull)
+			.toList();
+		Integer totalCalories = caloriesList.isEmpty() ? null :
+			caloriesList.stream().mapToInt(Integer::intValue).sum();
+
+		List<Integer> elevations = records.stream()
+			.map(TrainingRecord::getElevationGain)
+			.filter(Objects::nonNull)
+			.toList();
+		Integer totalElevationGain = elevations.isEmpty() ? null :
+			elevations.stream().mapToInt(Integer::intValue).sum();
+
+		UserProfile profile = userProfileRepository.findByUser(user).orElse(null);
+		BigDecimal monthlyGoalKm = profile != null ? profile.getMonthlyGoalKm() : null;
+		BigDecimal monthlyGoalProgress = null;
+		if (monthlyGoalKm != null && monthlyGoalKm.compareTo(BigDecimal.ZERO) > 0) {
+			monthlyGoalProgress = thisMonthDistance
+				.divide(monthlyGoalKm, 4, RoundingMode.HALF_UP)
+				.multiply(BigDecimal.valueOf(100));
+		}
+
+		Map<String, BestRecordInfo> bestRecordsByGoalType = calculateBestRecordsByGoalType(records);
+
 		return new RecordStatsResponse(
 			totalRuns, totalDistance, totalDuration, avgPace,
 			longestDistance, bestPace, longestDuration,
 			currentStreak, longestStreak,
-			feelingDistribution, totalPlanUpdates
+			feelingDistribution, totalPlanUpdates,
+			thisMonthDistance, lastMonthDistance, distanceChangePercent,
+			avgHeartRate, totalCalories,
+			monthlyGoalKm, monthlyGoalProgress,
+			bestRecordsByGoalType,
+			totalElevationGain
 		);
 	}
 
-	// 분/km 계산 (정렬용 숫자값)
+	private BigDecimal sumDistanceForMonth(List<TrainingRecord> records, YearMonth month) {
+		return records.stream()
+			.filter(r -> YearMonth.from(r.getRunDate()).equals(month))
+			.map(TrainingRecord::getDistanceKm)
+			.reduce(BigDecimal.ZERO, BigDecimal::add);
+	}
+
+	private Map<String, BestRecordInfo> calculateBestRecordsByGoalType(List<TrainingRecord> records) {
+
+		Map<String, BigDecimal> categoryRanges = Map.of(
+			"5k", BigDecimal.valueOf(5),
+			"10k", BigDecimal.valueOf(10),
+			"half", BigDecimal.valueOf(21.1),
+			"full", BigDecimal.valueOf(42.2)
+		);
+
+		Map<String, BestRecordInfo> result = new HashMap<>();
+
+		for (Map.Entry<String, BigDecimal> entry : categoryRanges.entrySet()) {
+			String category = entry.getKey();
+			BigDecimal targetDistance = entry.getValue();
+
+			BigDecimal lowerBound = targetDistance.multiply(BigDecimal.valueOf(0.9));
+			BigDecimal upperBound = targetDistance.multiply(BigDecimal.valueOf(1.1));
+
+			TrainingRecord best = records.stream()
+				.filter(r -> r.getDistanceKm().compareTo(lowerBound) >= 0
+					&& r.getDistanceKm().compareTo(upperBound) <= 0)
+				.min((r1, r2) -> Integer.compare(r1.getDurationMin(), r2.getDurationMin()))
+				.orElse(null);
+
+			if (best != null) {
+				result.put(category, new BestRecordInfo(
+					best.getDistanceKm(),
+					calculatePace(best.getDurationMin(), best.getDistanceKm()),
+					best.getDurationMin(),
+					best.getRunDate()
+				));
+			}
+		}
+
+		return result;
+	}
+
 	private double paceToMinutesPerKm(int durationMin, BigDecimal distanceKm) {
 		if (distanceKm.compareTo(BigDecimal.ZERO) == 0) return Double.MAX_VALUE;
 		return durationMin / distanceKm.doubleValue();
 	}
 
-	// "6'30\"" 형식으로 페이스 문자열 생성
 	private String calculatePace(int durationMin, BigDecimal distanceKm) {
 		if (distanceKm.compareTo(BigDecimal.ZERO) == 0) return "-";
 		double paceMinPerKm = durationMin / distanceKm.doubleValue();
@@ -267,13 +335,12 @@ public class RecordService {
 		return String.format("%d'%02d\"", minutes, seconds);
 	}
 
-	// 연속 기록일 계산 (현재 스트릭, 최장 스트릭)
 	private int[] calculateStreaks(List<TrainingRecord> records) {
 
 		List<LocalDate> dates = records.stream()
 			.map(TrainingRecord::getRunDate)
 			.distinct()
-			.sorted(Comparator.reverseOrder()) // 최신순
+			.sorted(Comparator.reverseOrder())
 			.toList();
 
 		if (dates.isEmpty()) return new int[]{0, 0};
@@ -282,10 +349,9 @@ public class RecordService {
 		int longestStreak = 1;
 		int tempStreak = 1;
 
-		// 현재 스트릭: 가장 최근 기록이 오늘 또는 어제인지부터 확인
 		LocalDate today = LocalDate.now();
 		if (!dates.get(0).equals(today) && !dates.get(0).equals(today.minusDays(1))) {
-			currentStreak = 0; // 오늘/어제 기록이 없으면 현재 스트릭은 끊긴 상태
+			currentStreak = 0;
 		}
 
 		for (int i = 0; i < dates.size() - 1; i++) {
@@ -301,8 +367,6 @@ public class RecordService {
 			}
 		}
 		longestStreak = Math.max(longestStreak, tempStreak);
-
-		if (currentStreak == 0) currentStreak = 0;
 
 		return new int[]{currentStreak, longestStreak};
 	}
