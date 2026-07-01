@@ -1,6 +1,9 @@
 package com.example.runmateaibackend.domain.plan.entity;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
+import java.util.Optional;
 
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
@@ -46,6 +49,10 @@ public class TrainingPlan {
 	@Column(name = "goal_type", nullable = false, length = 20)
 	private String goalType;
 
+	// 플랜 1주차 1일째에 해당하는 실제 날짜. 플랜 생성일의 다음 날로 고정된다.
+	@Column(name = "start_date", nullable = false)
+	private LocalDate startDate;
+
 	@Column(name = "is_active", nullable = false)
 	@Builder.Default
 	private boolean isActive = true;
@@ -64,6 +71,21 @@ public class TrainingPlan {
 
 	public void activate() {
 		this.isActive = true;
+	}
+
+	/**
+	 * 실제 날짜(date)가 이 플랜에서 몇 주차 며칠째에 해당하는지 계산한다.
+	 * week, day는 모두 1부터 시작한다 (week 1, day 1 = startDate).
+	 * startDate 이전 날짜이면 비어있는 Optional을 반환한다.
+	 */
+	public Optional<int[]> resolveWeekAndDay(LocalDate date) {
+		long offset = ChronoUnit.DAYS.between(this.startDate, date);
+		if (offset < 0) {
+			return Optional.empty();
+		}
+		int week = (int) (offset / 7) + 1;
+		int day = (int) (offset % 7) + 1;
+		return Optional.of(new int[] { week, day });
 	}
 
 }

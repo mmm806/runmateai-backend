@@ -4,6 +4,7 @@ import com.example.runmateaibackend.domain.feedback.entity.AiFeedback;
 import com.example.runmateaibackend.domain.feedback.repository.FeedbackRepository;
 import com.example.runmateaibackend.domain.plan.entity.TrainingPlan;
 import com.example.runmateaibackend.domain.plan.repository.PlanRepository;
+import com.example.runmateaibackend.domain.plan.service.PlanService;
 import com.example.runmateaibackend.domain.record.dto.*;
 import com.example.runmateaibackend.domain.record.entity.TrainingRecord;
 import com.example.runmateaibackend.domain.record.repository.RecordRepository;
@@ -31,6 +32,7 @@ public class RecordService {
 	private final RecordRepository recordRepository;
 	private final FeedbackRepository feedbackRepository;
 	private final UserProfileRepository userProfileRepository;
+	private final PlanService planService;
 
 	@Transactional
 	public RecordResponse createRecord(String email, RecordRequest request) {
@@ -59,6 +61,9 @@ public class RecordService {
 			.build();
 
 		recordRepository.save(record);
+
+		// 그날 플랜의 목표 거리를 채웠는지 자동으로 평가해 완료 처리한다.
+		planService.evaluateCompletion(record);
 
 		return new RecordResponse(record);
 	}
@@ -114,6 +119,9 @@ public class RecordService {
 			request.getElevationGain()
 		);
 
+		// 거리/날짜가 바뀌었을 수 있으므로 완료 여부를 다시 평가한다.
+		planService.evaluateCompletion(record);
+
 		return new RecordResponse(record);
 	}
 
@@ -132,6 +140,9 @@ public class RecordService {
 		List<AiFeedback> relatedFeedbacks = feedbackRepository.findByTrainingRecordId(recordId);
 		boolean wasPlanUpdatedByThisRecord = relatedFeedbacks.stream()
 			.anyMatch(AiFeedback::isPlanUpdated);
+
+		// 이 기록으로 인해 평가된 완료 상태가 있다면 먼저 되돌린다 (FK 제약 위반 방지 포함).
+		planService.revertCompletionForRecord(record);
 
 		feedbackRepository.deleteByTrainingRecord(record);
 		recordRepository.delete(record);

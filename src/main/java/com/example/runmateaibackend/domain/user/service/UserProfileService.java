@@ -1,11 +1,14 @@
 package com.example.runmateaibackend.domain.user.service;
 
+import com.example.runmateaibackend.domain.plan.service.PlanService;
 import com.example.runmateaibackend.domain.user.dto.ProfileRequest;
 import com.example.runmateaibackend.domain.user.dto.ProfileResponse;
 import com.example.runmateaibackend.domain.user.entity.User;
 import com.example.runmateaibackend.domain.user.entity.UserProfile;
 import com.example.runmateaibackend.domain.user.repository.UserProfileRepository;
 import com.example.runmateaibackend.domain.user.repository.UserRepository;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -14,8 +17,12 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class UserProfileService {
 
+	@PersistenceContext
+	private EntityManager entityManager;
+
 	private final UserRepository userRepository;
 	private final UserProfileRepository userProfileRepository;
+	private final PlanService planService;
 
 	@Transactional
 	public void createProfile(String email, ProfileRequest request) {
@@ -37,6 +44,12 @@ public class UserProfileService {
 			.build();
 
 		userProfileRepository.save(profile);
+
+		// 프로필 등록이 끝나면 그 정보를 기반으로 AI 훈련 플랜을 바로 생성해준다.
+		// PlanService.createPlan()이 같은 email로 유저/프로필을 다시 조회하므로
+		// 방금 저장한 profile이 먼저 보이도록 flush 해둔다.
+		entityManager.flush();
+		planService.createPlan(email);
 	}
 
 	public ProfileResponse getProfile(String email) {
