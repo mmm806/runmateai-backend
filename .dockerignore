@@ -1,0 +1,12 @@
+.git
+.gitignore
+.env
+.env.example
+*.md
+build/
+.gradle/
+.idea/
+*.iml
+out/
+design-reference/
+*.html
