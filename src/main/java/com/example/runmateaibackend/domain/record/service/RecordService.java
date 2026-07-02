@@ -179,8 +179,32 @@ public class RecordService {
 
 		List<TrainingRecord> records = recordRepository.findByUserOrderByRunDateDesc(user);
 
+		// 기록이 없으면 빈 통계 객체 반환 (예외 대신) — 처음 가입한 유저가 통계 페이지에 접속해도 500 에러가 나지 않게
 		if (records.isEmpty()) {
-			throw new IllegalArgumentException("러닝 기록이 없습니다.");
+			UserProfile profile = userProfileRepository.findByUser(user).orElse(null);
+			BigDecimal monthlyGoal = profile != null ? profile.getMonthlyGoalKm() : null;
+			return new RecordStatsResponse(
+				0,                  // totalRuns
+				BigDecimal.ZERO,    // totalDistanceKm
+				0,                  // totalDurationMin
+				"-",                // avgPace
+				BigDecimal.ZERO,    // longestDistanceKm
+				"-",                // bestPace
+				0,                  // longestDurationMin
+				0,                  // currentStreak
+				0,                  // longestStreak
+				new HashMap<>(),    // feelingDistribution
+				0,                  // totalPlanUpdates
+				BigDecimal.ZERO,    // thisMonthDistanceKm
+				BigDecimal.ZERO,    // lastMonthDistanceKm
+				0.0,                // distanceChangePercent
+				null,               // avgHeartRate
+				null,               // totalCalories
+				monthlyGoal,        // monthlyGoalKm
+				monthlyGoal != null ? BigDecimal.ZERO : null, // monthlyGoalProgressPercent
+				new HashMap<>(),    // bestRecordsByGoalType
+				null                // totalElevationGain
+			);
 		}
 
 		int totalRuns = records.size();

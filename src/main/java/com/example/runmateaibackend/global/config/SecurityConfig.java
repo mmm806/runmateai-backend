@@ -24,10 +24,15 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 import java.util.List;
 
+import org.springframework.beans.factory.annotation.Value;
+
 @Configuration
 @EnableWebSecurity
 @RequiredArgsConstructor
 public class SecurityConfig {
+
+	@Value("${cors.allowed-origins:http://localhost:5173,http://localhost:5174}")
+	private String allowedOriginsRaw;
 
 	private final JwtUtil jwtUtil;
 	private final CustomUserDetailsService userDetailsService;
@@ -82,19 +87,13 @@ public class SecurityConfig {
 	public CorsConfigurationSource corsConfigurationSource() {
 		CorsConfiguration configuration = new CorsConfiguration();
 
-		// 프론트엔드 개발 서버 주소 허용
-		configuration.setAllowedOrigins(List.of(
-			"http://localhost:5173",
-			"http://localhost:5174"
-		));
+		// 환경변수 CORS_ALLOWED_ORIGINS로 도메인을 추가할 수 있음
+		// 예: CORS_ALLOWED_ORIGINS=http://localhost:5173,https://your-cloudfront-url.cloudfront.net
+		List<String> allowedOrigins = List.of(allowedOriginsRaw.split(","));
+		configuration.setAllowedOrigins(allowedOrigins);
 
-		// 허용할 HTTP 메서드
 		configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"));
-
-		// 허용할 헤더 (Authorization 포함 필수)
 		configuration.setAllowedHeaders(List.of("*"));
-
-		// 자격 증명(쿠키, Authorization 헤더 등) 허용
 		configuration.setAllowCredentials(true);
 
 		UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
@@ -102,4 +101,3 @@ public class SecurityConfig {
 		return source;
 	}
 }
-
