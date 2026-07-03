@@ -36,3 +36,11 @@ cors:
   # 배포 시 AWS CloudFront URL 또는 커스텀 도메인을 쉼표로 추가
   # 예: http://localhost:5173,http://localhost:5174,https://xxxx.cloudfront.net
   allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173,http://localhost:5174}
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+    tags-sorter: alpha
+    operations-sorter: alpha
+  api-docs:
+    path: /v3/api-docs

@@ -72,6 +72,7 @@ public class SecurityConfig {
 			.authorizeHttpRequests(auth -> auth
 				// 회원가입, 로그인은 인증 없이 접근 가능
 				.requestMatchers("/api/auth/signup", "/api/auth/login", "/api/auth/reissue").permitAll()
+				.requestMatchers("/swagger-ui/**", "/v3/api-docs/**", "/swagger-ui.html").permitAll()
 				// 그 외 모든 요청은 인증 필요
 				.anyRequest().authenticated()
 			)
