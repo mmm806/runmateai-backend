@@ -16,7 +16,8 @@ RUN chmod +x gradlew && ./gradlew dependencies --no-daemon 2>/dev/null || true
 
 # 소스 코드 복사 후 빌드
 COPY src src
-RUN ./gradlew bootJar --no-daemon -x test
+RUN --mount=type=cache,target=/root/.gradle \
+    ./gradlew bootJar --no-daemon -x test
 
 # ================================
 # 2단계: 실행 (JRE만 포함한 경량 이미지)

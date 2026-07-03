@@ -19,7 +19,7 @@ jobs:
           script: |
             cd ~/runmateai-backend
             git pull origin main
-            docker build -t runmateai-backend:latest .
+            DOCKER_BUILDKIT=1 docker build -t runmateai-backend:latest .
             docker compose -f docker-compose.prod.yml down
             docker compose -f docker-compose.prod.yml up -d
             docker image prune -f
