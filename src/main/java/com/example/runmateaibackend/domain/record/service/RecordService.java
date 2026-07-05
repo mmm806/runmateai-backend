@@ -13,6 +13,7 @@ import com.example.runmateaibackend.domain.user.entity.UserProfile;
 import com.example.runmateaibackend.domain.user.repository.UserProfileRepository;
 import com.example.runmateaibackend.domain.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -23,6 +24,7 @@ import java.time.YearMonth;
 import java.time.temporal.ChronoUnit;
 import java.util.*;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class RecordService {
@@ -175,6 +177,8 @@ public class RecordService {
 
 	public RecordStatsResponse getStats(String email) {
 
+		long startTime = System.currentTimeMillis();
+
 		User user = findUserByEmail(email);
 
 		List<TrainingRecord> records = recordRepository.findByUserOrderByRunDateDesc(user);
@@ -299,6 +303,9 @@ public class RecordService {
 		}
 
 		Map<String, BestRecordInfo> bestRecordsByGoalType = calculateBestRecordsByGoalType(records);
+
+		long endTime = System.currentTimeMillis();
+		log.info("[STATS PERFORMANCE] 기록 {}개 처리 시간: {}ms (최적화 전)", records.size(), endTime - startTime);
 
 		return new RecordStatsResponse(
 			totalRuns, totalDistance, totalDuration, avgPace,
