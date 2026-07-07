@@ -13,6 +13,7 @@ public interface RecordStatsProjection {
 	BigDecimal getTotalDistance();
 	Long getTotalDuration();
 	BigDecimal getLongestDistance();
+	Integer getLongestDuration();
 	Double getAvgHeartRate();
 	Long getTotalCalories();
 	Long getTotalElevationGain();

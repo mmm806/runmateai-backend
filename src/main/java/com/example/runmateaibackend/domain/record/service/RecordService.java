@@ -219,6 +219,7 @@ public class RecordService {
 		BigDecimal totalDistance = stats.getTotalDistance() != null ? stats.getTotalDistance() : BigDecimal.ZERO;
 		int totalDuration = stats.getTotalDuration() != null ? stats.getTotalDuration().intValue() : 0;
 		BigDecimal longestDistance = stats.getLongestDistance() != null ? stats.getLongestDistance() : BigDecimal.ZERO;
+		int longestDuration = stats.getLongestDuration() != null ? stats.getLongestDuration() : 0;
 		Integer avgHeartRate = stats.getAvgHeartRate() != null ? stats.getAvgHeartRate().intValue() : null;
 		Integer totalCalories = stats.getTotalCalories() != null ? stats.getTotalCalories().intValue() : null;
 		Integer totalElevationGain = stats.getTotalElevationGain() != null ? stats.getTotalElevationGain().intValue() : null;
@@ -253,29 +254,16 @@ public class RecordService {
 		int currentStreak = streaks[0];
 		int longestStreak = streaks[1];
 
-		// ⑤ 최고 페이스 — 전체 기록이 필요한 경우라 별도 조회 (최소한의 컬럼만)
-		List<TrainingRecord> allRecords = recordRepository.findByUserOrderByRunDateDesc(user);
-		String bestPace = allRecords.stream()
-			.min((r1, r2) -> Double.compare(
-				paceToMinutesPerKm(r1.getDurationMin(), r1.getDistanceKm()),
-				paceToMinutesPerKm(r2.getDurationMin(), r2.getDistanceKm())
-			))
+		// ⑤ 최고 페이스 — 전체 기록을 로드하지 않고, DB에서 정렬 후 1건만 조회
+		String bestPace = recordRepository.findBestPaceRecordByUserId(user.getId())
 			.map(r -> calculatePace(r.getDurationMin(), r.getDistanceKm()))
 			.orElse("-");
 
-		int longestDuration = allRecords.stream()
-			.mapToInt(TrainingRecord::getDurationMin)
-			.max()
-			.orElse(0);
+		// ⑥ 플랜 업데이트 횟수 — 전체 피드백을 로드하지 않고 COUNT 쿼리로 처리
+		int totalPlanUpdates = (int) feedbackRepository.countByUserAndPlanUpdatedTrue(user);
 
-		// ⑥ 플랜 업데이트 횟수
-		int totalPlanUpdates = (int) feedbackRepository.findByUserOrderByCreatedAtDesc(user)
-			.stream()
-			.filter(AiFeedback::isPlanUpdated)
-			.count();
-
-		// ⑦ 목표별 베스트 기록
-		Map<String, BestRecordInfo> bestRecordsByGoalType = calculateBestRecordsByGoalType(allRecords);
+		// ⑦ 목표별 베스트 기록 — 목표 구간(5k/10k/half/full)마다 조건에 맞는 1건만 조회
+		Map<String, BestRecordInfo> bestRecordsByGoalType = calculateBestRecordsByGoalType(user);
 
 		UserProfile profile = userProfileRepository.findByUser(user).orElse(null);
 		BigDecimal monthlyGoalKm = profile != null ? profile.getMonthlyGoalKm() : null;
@@ -302,7 +290,8 @@ public class RecordService {
 		);
 	}
 
-	private Map<String, BestRecordInfo> calculateBestRecordsByGoalType(List<TrainingRecord> records) {
+	// 최적화: 유저의 전체 기록을 로드하는 대신, 목표 구간별로 조건에 맞는 1건만 DB에서 조회
+	private Map<String, BestRecordInfo> calculateBestRecordsByGoalType(User user) {
 
 		Map<String, BigDecimal> categoryRanges = Map.of(
 			"5k", BigDecimal.valueOf(5),
@@ -320,28 +309,16 @@ public class RecordService {
 			BigDecimal lowerBound = targetDistance.multiply(BigDecimal.valueOf(0.9));
 			BigDecimal upperBound = targetDistance.multiply(BigDecimal.valueOf(1.1));
 
-			TrainingRecord best = records.stream()
-				.filter(r -> r.getDistanceKm().compareTo(lowerBound) >= 0
-					&& r.getDistanceKm().compareTo(upperBound) <= 0)
-				.min((r1, r2) -> Integer.compare(r1.getDurationMin(), r2.getDurationMin()))
-				.orElse(null);
-
-			if (best != null) {
-				result.put(category, new BestRecordInfo(
+			recordRepository.findFirstByUserAndDistanceKmBetweenOrderByDurationMinAsc(user, lowerBound, upperBound)
+				.ifPresent(best -> result.put(category, new BestRecordInfo(
 					best.getDistanceKm(),
 					calculatePace(best.getDurationMin(), best.getDistanceKm()),
 					best.getDurationMin(),
 					best.getRunDate()
-				));
-			}
+				)));
 		}
 
 		return result;
-	}
-
-	private double paceToMinutesPerKm(int durationMin, BigDecimal distanceKm) {
-		if (distanceKm.compareTo(BigDecimal.ZERO) == 0) return Double.MAX_VALUE;
-		return durationMin / distanceKm.doubleValue();
 	}
 
 	private String calculatePace(int durationMin, BigDecimal distanceKm) {
@@ -350,15 +327,6 @@ public class RecordService {
 		int minutes = (int) paceMinPerKm;
 		int seconds = (int) Math.round((paceMinPerKm - minutes) * 60);
 		return String.format("%d'%02d\"", minutes, seconds);
-	}
-
-	private int[] calculateStreaks(List<TrainingRecord> records) {
-		List<LocalDate> dates = records.stream()
-			.map(TrainingRecord::getRunDate)
-			.distinct()
-			.sorted(Comparator.reverseOrder())
-			.toList();
-		return calculateStreaksByDates(dates);
 	}
 
 	// 최적화: 날짜 리스트만 받아서 스트릭 계산 (전체 엔티티 불필요)
