@@ -181,10 +181,11 @@ public class RecordService {
 
 		User user = findUserByEmail(email);
 
-		List<TrainingRecord> records = recordRepository.findByUserOrderByRunDateDesc(user);
+		// 최적화: 전체 기록을 메모리에 올리는 대신, DB에서 집계값만 가져옴
+		long totalCount = recordRepository.countByUser(user);
 
 		// 기록이 없으면 빈 통계 객체 반환 (예외 대신) — 처음 가입한 유저가 통계 페이지에 접속해도 500 에러가 나지 않게
-		if (records.isEmpty()) {
+		if (totalCount == 0) {
 			UserProfile profile = userProfileRepository.findByUser(user).orElse(null);
 			BigDecimal monthlyGoal = profile != null ? profile.getMonthlyGoalKm() : null;
 			return new RecordStatsResponse(
@@ -211,58 +212,32 @@ public class RecordService {
 			);
 		}
 
-		int totalRuns = records.size();
+		// ① DB 집계 쿼리로 기본 통계 한 번에 계산 (전체 기록을 메모리에 올리지 않음)
+		RecordStatsProjection stats = recordRepository.findAggregatedStatsByUser(user);
 
-		BigDecimal totalDistance = records.stream()
-			.map(TrainingRecord::getDistanceKm)
-			.reduce(BigDecimal.ZERO, BigDecimal::add);
-
-		int totalDuration = records.stream()
-			.mapToInt(TrainingRecord::getDurationMin)
-			.sum();
+		int totalRuns = stats.getTotalRuns().intValue();
+		BigDecimal totalDistance = stats.getTotalDistance() != null ? stats.getTotalDistance() : BigDecimal.ZERO;
+		int totalDuration = stats.getTotalDuration() != null ? stats.getTotalDuration().intValue() : 0;
+		BigDecimal longestDistance = stats.getLongestDistance() != null ? stats.getLongestDistance() : BigDecimal.ZERO;
+		Integer avgHeartRate = stats.getAvgHeartRate() != null ? stats.getAvgHeartRate().intValue() : null;
+		Integer totalCalories = stats.getTotalCalories() != null ? stats.getTotalCalories().intValue() : null;
+		Integer totalElevationGain = stats.getTotalElevationGain() != null ? stats.getTotalElevationGain().intValue() : null;
 
 		String avgPace = calculatePace(totalDuration, totalDistance);
 
-		BigDecimal longestDistance = records.stream()
-			.map(TrainingRecord::getDistanceKm)
-			.max(BigDecimal::compareTo)
-			.orElse(BigDecimal.ZERO);
-
-		String bestPace = records.stream()
-			.min((r1, r2) -> Double.compare(
-				paceToMinutesPerKm(r1.getDurationMin(), r1.getDistanceKm()),
-				paceToMinutesPerKm(r2.getDurationMin(), r2.getDistanceKm())
-			))
-			.map(r -> calculatePace(r.getDurationMin(), r.getDistanceKm()))
-			.orElse("-");
-
-		int longestDuration = records.stream()
-			.mapToInt(TrainingRecord::getDurationMin)
-			.max()
-			.orElse(0);
-
-		int[] streaks = calculateStreaks(records);
-		int currentStreak = streaks[0];
-		int longestStreak = streaks[1];
-
+		// ② 컨디션 분포 — DB GROUP BY로 집계
 		Map<String, Integer> feelingDistribution = new HashMap<>();
-		for (TrainingRecord record : records) {
-			String feeling = record.getFeeling() != null ? record.getFeeling() : "unknown";
-			feelingDistribution.merge(feeling, 1, Integer::sum);
-		}
+		recordRepository.countByFeeling(user).forEach(row -> {
+			String feeling = row[0] != null ? (String) row[0] : "unknown";
+			int cnt = ((Long) row[1]).intValue();
+			feelingDistribution.put(feeling, cnt);
+		});
 
-		int totalPlanUpdates = (int) feedbackRepository.findByUserOrderByCreatedAtDesc(user)
-			.stream()
-			.filter(AiFeedback::isPlanUpdated)
-			.count();
-
-		// --- 새로 추가된 통계 ---
-
+		// ③ 월별 거리 — DB에서 날짜 조건 필터 후 합산
 		YearMonth thisMonth = YearMonth.now();
 		YearMonth lastMonth = thisMonth.minusMonths(1);
-
-		BigDecimal thisMonthDistance = sumDistanceForMonth(records, thisMonth);
-		BigDecimal lastMonthDistance = sumDistanceForMonth(records, lastMonth);
+		BigDecimal thisMonthDistance = recordRepository.sumDistanceByUserAndMonth(user, thisMonth.getYear(), thisMonth.getMonthValue());
+		BigDecimal lastMonthDistance = recordRepository.sumDistanceByUserAndMonth(user, lastMonth.getYear(), lastMonth.getMonthValue());
 
 		Double distanceChangePercent = null;
 		if (lastMonthDistance.compareTo(BigDecimal.ZERO) > 0) {
@@ -272,26 +247,35 @@ public class RecordService {
 				.doubleValue();
 		}
 
-		List<Integer> heartRates = records.stream()
-			.map(TrainingRecord::getAvgHeartRate)
-			.filter(Objects::nonNull)
-			.toList();
-		Integer avgHeartRate = heartRates.isEmpty() ? null :
-			(int) heartRates.stream().mapToInt(Integer::intValue).average().orElse(0);
+		// ④ 스트릭 계산 — 날짜 컬럼만 조회 (전체 엔티티 불필요)
+		List<LocalDate> dates = recordRepository.findRunDatesByUser(user);
+		int[] streaks = calculateStreaksByDates(dates);
+		int currentStreak = streaks[0];
+		int longestStreak = streaks[1];
 
-		List<Integer> caloriesList = records.stream()
-			.map(TrainingRecord::getCalories)
-			.filter(Objects::nonNull)
-			.toList();
-		Integer totalCalories = caloriesList.isEmpty() ? null :
-			caloriesList.stream().mapToInt(Integer::intValue).sum();
+		// ⑤ 최고 페이스 — 전체 기록이 필요한 경우라 별도 조회 (최소한의 컬럼만)
+		List<TrainingRecord> allRecords = recordRepository.findByUserOrderByRunDateDesc(user);
+		String bestPace = allRecords.stream()
+			.min((r1, r2) -> Double.compare(
+				paceToMinutesPerKm(r1.getDurationMin(), r1.getDistanceKm()),
+				paceToMinutesPerKm(r2.getDurationMin(), r2.getDistanceKm())
+			))
+			.map(r -> calculatePace(r.getDurationMin(), r.getDistanceKm()))
+			.orElse("-");
 
-		List<Integer> elevations = records.stream()
-			.map(TrainingRecord::getElevationGain)
-			.filter(Objects::nonNull)
-			.toList();
-		Integer totalElevationGain = elevations.isEmpty() ? null :
-			elevations.stream().mapToInt(Integer::intValue).sum();
+		int longestDuration = allRecords.stream()
+			.mapToInt(TrainingRecord::getDurationMin)
+			.max()
+			.orElse(0);
+
+		// ⑥ 플랜 업데이트 횟수
+		int totalPlanUpdates = (int) feedbackRepository.findByUserOrderByCreatedAtDesc(user)
+			.stream()
+			.filter(AiFeedback::isPlanUpdated)
+			.count();
+
+		// ⑦ 목표별 베스트 기록
+		Map<String, BestRecordInfo> bestRecordsByGoalType = calculateBestRecordsByGoalType(allRecords);
 
 		UserProfile profile = userProfileRepository.findByUser(user).orElse(null);
 		BigDecimal monthlyGoalKm = profile != null ? profile.getMonthlyGoalKm() : null;
@@ -302,10 +286,8 @@ public class RecordService {
 				.multiply(BigDecimal.valueOf(100));
 		}
 
-		Map<String, BestRecordInfo> bestRecordsByGoalType = calculateBestRecordsByGoalType(records);
-
 		long endTime = System.currentTimeMillis();
-		log.info("[STATS PERFORMANCE] 기록 {}개 처리 시간: {}ms (최적화 전)", records.size(), endTime - startTime);
+		log.info("[STATS PERFORMANCE] 기록 {}개 처리 시간: {}ms (최적화 후)", totalRuns, endTime - startTime);
 
 		return new RecordStatsResponse(
 			totalRuns, totalDistance, totalDuration, avgPace,
@@ -318,13 +300,6 @@ public class RecordService {
 			bestRecordsByGoalType,
 			totalElevationGain
 		);
-	}
-
-	private BigDecimal sumDistanceForMonth(List<TrainingRecord> records, YearMonth month) {
-		return records.stream()
-			.filter(r -> YearMonth.from(r.getRunDate()).equals(month))
-			.map(TrainingRecord::getDistanceKm)
-			.reduce(BigDecimal.ZERO, BigDecimal::add);
 	}
 
 	private Map<String, BestRecordInfo> calculateBestRecordsByGoalType(List<TrainingRecord> records) {
@@ -378,12 +353,16 @@ public class RecordService {
 	}
 
 	private int[] calculateStreaks(List<TrainingRecord> records) {
-
 		List<LocalDate> dates = records.stream()
 			.map(TrainingRecord::getRunDate)
 			.distinct()
 			.sorted(Comparator.reverseOrder())
 			.toList();
+		return calculateStreaksByDates(dates);
+	}
+
+	// 최적화: 날짜 리스트만 받아서 스트릭 계산 (전체 엔티티 불필요)
+	private int[] calculateStreaksByDates(List<LocalDate> dates) {
 
 		if (dates.isEmpty()) return new int[]{0, 0};
 
