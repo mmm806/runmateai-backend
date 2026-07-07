@@ -175,6 +175,7 @@ public class RecordService {
 		}
 	}
 
+	@Transactional(readOnly = true)
 	public RecordStatsResponse getStats(String email) {
 
 		long startTime = System.currentTimeMillis();
