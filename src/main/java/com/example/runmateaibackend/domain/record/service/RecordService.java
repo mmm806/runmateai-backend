@@ -45,7 +45,7 @@ public class RecordService {
 			throw new IllegalArgumentException("해당 날짜에 이미 기록이 존재합니다.");
 		}
 
-		TrainingPlan activePlan = planRepository.findByUserAndIsActive(user, true)
+		TrainingPlan activePlan = planRepository.findFirstByUserAndIsActiveOrderByCreatedAtDesc(user, true)
 			.orElse(null);
 
 		TrainingRecord record = TrainingRecord.builder()
@@ -156,7 +156,7 @@ public class RecordService {
 
 	private void revertToLatestPlanUpdate(User user) {
 
-		planRepository.findByUserAndIsActive(user, true)
+		planRepository.findFirstByUserAndIsActiveOrderByCreatedAtDesc(user, true)
 			.ifPresent(TrainingPlan::deactivate);
 
 		List<AiFeedback> feedbacks = feedbackRepository.findByUserOrderByCreatedAtDesc(user);

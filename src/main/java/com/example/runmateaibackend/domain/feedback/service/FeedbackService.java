@@ -57,7 +57,7 @@ public class FeedbackService {
 
 		List<TrainingRecord> recentRecords = recordRepository.findTop5ByUserOrderByRunDateDesc(user);
 
-		TrainingPlan activePlan = planRepository.findByUserAndIsActive(user, true)
+		TrainingPlan activePlan = planRepository.findFirstByUserAndIsActiveOrderByCreatedAtDesc(user, true)
 			.orElseThrow(() -> new IllegalArgumentException("활성화된 플랜이 없습니다."));
 
 		String prompt = feedbackPromptBuilder.build(targetRecord, recentRecords, activePlan);

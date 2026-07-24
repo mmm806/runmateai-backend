@@ -51,7 +51,7 @@ public class PlanService {
 			.orElseThrow(() -> new IllegalArgumentException("프로필을 먼저 등록해주세요."));
 
 		// 기존 활성 플랜 비활성화
-		planRepository.findByUserAndIsActive(user, true)
+		planRepository.findFirstByUserAndIsActiveOrderByCreatedAtDesc(user, true)
 			.ifPresent(existingPlan -> {
 				existingPlan.deactivate();
 				planRepository.save(existingPlan);
@@ -83,7 +83,7 @@ public class PlanService {
 		User user = userRepository.findByEmail(email)
 			.orElseThrow(() -> new IllegalArgumentException("유저를 찾을 수 없습니다."));
 
-		TrainingPlan plan = planRepository.findByUserAndIsActive(user, true)
+		TrainingPlan plan = planRepository.findFirstByUserAndIsActiveOrderByCreatedAtDesc(user, true)
 			.orElseThrow(() -> new IllegalArgumentException("활성화된 플랜이 없습니다."));
 
 		List<PlanDayProgressResponse> progress = planDayProgressRepository.findByTrainingPlan(plan)
