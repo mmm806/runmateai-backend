@@ -39,8 +39,9 @@ jobs:
           key: ${{ secrets.EC2_SSH_KEY }}
           command_timeout: 10m
           script: |
-            echo ${{ secrets.GHCR_TOKEN }} | docker login ghcr.io -u ${{ secrets.GHCR_USERNAME }} --password-stdin
-            docker pull ghcr.io/${{ secrets.GHCR_USERNAME }}/runmateai-backend:latest
+            set -e
+            docker login ghcr.io -u ${{ secrets.GHCR_USERNAME }} -p ${{ secrets.GHCR_TOKEN }}
+            docker pull ghcr.io/${{ github.repository_owner }}/runmateai-backend:latest
             cd ~/runmateai-backend
             git pull origin main
             docker compose -f docker-compose.prod.yml down
