@@ -47,6 +47,15 @@ public class PlanService {
 		User user = userRepository.findByEmail(email)
 			.orElseThrow(() -> new IllegalArgumentException("유저를 찾을 수 없습니다."));
 
+		// 동시에 같은 유저가 여러 번 요청해도 순차적으로 처리되도록 유저 단위 락을 건다.
+		// pg_advisory_xact_lock은 현재 트랜잭션이 끝나는 즉시(커밋/롤백) 자동으로 해제되므로
+		// 별도의 unlock 코드가 필요 없다. 같은 user_id로 락을 시도하는 다른 요청은
+		// 이 트랜잭션이 끝날 때까지 여기서 대기하게 되어, "활성 플랜 확인 → 새 플랜 생성"
+		// 사이에 다른 요청이 끼어들며 발생하던 경쟁 상태(유니크 제약 위반)를 원천 차단한다.
+		entityManager.createNativeQuery("SELECT pg_advisory_xact_lock(:userId)")
+			.setParameter("userId", user.getId())
+			.getResultList();
+
 		UserProfile profile = userProfileRepository.findByUser(user)
 			.orElseThrow(() -> new IllegalArgumentException("프로필을 먼저 등록해주세요."));
 
