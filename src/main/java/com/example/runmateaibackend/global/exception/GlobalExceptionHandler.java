@@ -1,5 +1,7 @@
 package com.example.runmateaibackend.global.exception;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -8,6 +10,8 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+
+	private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
 	// 비즈니스 로직 예외 (예: "프로필을 먼저 등록해주세요.")
 	// → 400 Bad Request로 명확하게 응답
@@ -34,6 +38,7 @@ public class GlobalExceptionHandler {
 	// → 500 Internal Server Error
 	@ExceptionHandler(Exception.class)
 	public ResponseEntity<ErrorResponse> handleException(Exception e) {
+		log.error("처리되지 않은 예외 발생", e);
 		ErrorResponse response = new ErrorResponse("서버 오류가 발생했습니다.", HttpStatus.INTERNAL_SERVER_ERROR.value());
 		return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
 	}
