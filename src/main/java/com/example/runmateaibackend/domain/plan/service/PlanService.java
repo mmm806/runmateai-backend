@@ -1,10 +1,13 @@
 package com.example.runmateaibackend.domain.plan.service;
 
 import java.math.BigDecimal;
-import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 
 import com.example.runmateaibackend.domain.plan.dto.PlanDayProgressResponse;
 import com.example.runmateaibackend.domain.plan.dto.PlanResponse;
@@ -19,8 +22,6 @@ import com.example.runmateaibackend.domain.user.repository.UserProfileRepository
 import com.example.runmateaibackend.domain.user.repository.UserRepository;
 import com.example.runmateaibackend.global.client.ClaudeApiClient;
 
-import jakarta.persistence.EntityManager;
-import jakarta.persistence.PersistenceContext;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -29,8 +30,6 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 @RequiredArgsConstructor
 public class PlanService {
-	@PersistenceContext
-	private EntityManager entityManager;
 
 	private final UserRepository userRepository;
 	private final UserProfileRepository userProfileRepository;
@@ -39,46 +38,35 @@ public class PlanService {
 	private final ClaudeApiClient claudeApiClient;
 	private final PlanPromptBuilder planPromptBuilder;
 	private final PlanDayLookup planDayLookup;
+	private final PlanTransactionSupport planTransactionSupport;
 
-	// 새 플랜 생성
-	@Transactional
+	private final Map<Long, Lock> userPlanLocks = new ConcurrentHashMap<>();
+
 	public PlanResponse createPlan(String email) {
 
 		User user = userRepository.findByEmail(email)
 			.orElseThrow(() -> new IllegalArgumentException("유저를 찾을 수 없습니다."));
 
-		entityManager.createNativeQuery("SELECT pg_advisory_xact_lock(?1)")
-			.setParameter(1, user.getId())
-			.getResultList();
+		Lock lock = userPlanLocks.computeIfAbsent(user.getId(), id -> new ReentrantLock());
+		lock.lock();
+		try {
+			UserProfile profile = userProfileRepository.findByUser(user)
+				.orElseThrow(() -> new IllegalArgumentException("프로필을 먼저 등록해주세요."));
 
-		UserProfile profile = userProfileRepository.findByUser(user)
-			.orElseThrow(() -> new IllegalArgumentException("프로필을 먼저 등록해주세요."));
+			// 1) 짧은 트랜잭션 - 기존 활성 플랜 비활성화
+			planTransactionSupport.deactivateExistingActivePlan(user);
 
-		// 기존 활성 플랜 비활성화
-		planRepository.findFirstByUserAndIsActiveOrderByCreatedAtDesc(user, true)
-			.ifPresent(existingPlan -> {
-				existingPlan.deactivate();
-				planRepository.save(existingPlan);
-			});
+			// 2) 트랜잭션 없음 - Claude API 호출 (DB 커넥션을 전혀 점유하지 않는 구간)
+			String prompt = planPromptBuilder.build(profile);
+			String planDataJson = claudeApiClient.sendMessage(prompt);
 
-		entityManager.flush();
+			// 3) 짧은 트랜잭션 - 새 플랜 저장
+			TrainingPlan newPlan = planTransactionSupport.saveNewPlan(user, profile, planDataJson);
 
-		// 프롬프트 생성 후 Claude API 호출
-		String prompt = planPromptBuilder.build(profile);
-		String planDataJson = claudeApiClient.sendMessage(prompt);
-
-		// 새 플랜 저장 - 1주차 1일째는 항상 생성일의 "다음 날"로 고정
-		TrainingPlan newPlan = TrainingPlan.builder()
-			.user(user)
-			.planData(planDataJson)
-			.goalType(profile.getGoalType())
-			.startDate(LocalDate.now().plusDays(1))
-			.isActive(true)
-			.build();
-
-		planRepository.save(newPlan);
-
-		return new PlanResponse(newPlan);
+			return new PlanResponse(newPlan);
+		} finally {
+			lock.unlock();
+		}
 	}
 
 	// 현재 활성 플랜 조회
