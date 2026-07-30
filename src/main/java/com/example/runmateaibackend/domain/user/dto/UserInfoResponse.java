@@ -8,6 +8,7 @@ import java.time.LocalDateTime;
 @Getter
 public class UserInfoResponse {
 
+	// role 추가
 	private String email;
 	private String name;
 	private String role;
