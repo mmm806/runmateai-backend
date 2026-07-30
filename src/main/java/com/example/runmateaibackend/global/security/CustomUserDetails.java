@@ -18,10 +18,10 @@ public class CustomUserDetails implements UserDetails {
 		this.user = user;
 	}
 
-	// 권한 목록 (지금은 단일 권한 USER만 사용)
+	// 권한 목록 - User.role에 따라 ROLE_USER 또는 ROLE_ADMIN 반환
 	@Override
 	public Collection<? extends GrantedAuthority> getAuthorities() {
-		return List.of(new SimpleGrantedAuthority("ROLE_USER"));
+		return List.of(new SimpleGrantedAuthority("ROLE_" + user.getRole().name()));
 	}
 
 	// 비밀번호 반환
@@ -42,10 +42,10 @@ public class CustomUserDetails implements UserDetails {
 		return true;
 	}
 
-	// 계정 잠김 여부 (true = 잠기지 않음)
+	// 계정 잠김 여부 (true = 잠기지 않음) - 관리자가 잠근 계정은 false 반환
 	@Override
 	public boolean isAccountNonLocked() {
-		return true;
+		return !user.isLocked();
 	}
 
 	// 비밀번호 만료 여부 (true = 만료 안 됨)
