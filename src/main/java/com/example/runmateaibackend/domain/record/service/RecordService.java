@@ -12,6 +12,10 @@ import com.example.runmateaibackend.domain.user.entity.User;
 import com.example.runmateaibackend.domain.user.entity.UserProfile;
 import com.example.runmateaibackend.domain.user.repository.UserProfileRepository;
 import com.example.runmateaibackend.domain.user.repository.UserRepository;
+import com.example.runmateaibackend.global.exception.ConflictException;
+import com.example.runmateaibackend.global.exception.ForbiddenException;
+import com.example.runmateaibackend.global.exception.ResourceNotFoundException;
+
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -42,7 +46,7 @@ public class RecordService {
 		User user = findUserByEmail(email);
 
 		if (recordRepository.findByUserAndRunDate(user, request.getRunDate()).isPresent()) {
-			throw new IllegalArgumentException("해당 날짜에 이미 기록이 존재합니다.");
+			throw new ConflictException("해당 날짜에 이미 기록이 존재합니다.");
 		}
 
 		TrainingPlan activePlan = planRepository.findFirstByUserAndIsActiveOrderByCreatedAtDesc(user, true)
@@ -85,7 +89,7 @@ public class RecordService {
 		User user = findUserByEmail(email);
 
 		TrainingRecord record = recordRepository.findByUserAndRunDate(user, date)
-			.orElseThrow(() -> new IllegalArgumentException("해당 날짜에 기록이 없습니다."));
+			.orElseThrow(() -> new ResourceNotFoundException("해당 날짜에 기록이 없습니다."));
 
 		return new RecordResponse(record);
 	}
@@ -96,16 +100,16 @@ public class RecordService {
 		User user = findUserByEmail(email);
 
 		TrainingRecord record = recordRepository.findById(recordId)
-			.orElseThrow(() -> new IllegalArgumentException("기록을 찾을 수 없습니다."));
+			.orElseThrow(() -> new ResourceNotFoundException("기록을 찾을 수 없습니다."));
 
 		if (!record.getUser().getId().equals(user.getId())) {
-			throw new IllegalArgumentException("본인의 기록만 수정할 수 있습니다.");
+			throw new ForbiddenException("본인의 기록만 수정할 수 있습니다.");
 		}
 
 		if (!record.getRunDate().equals(request.getRunDate())) {
 			recordRepository.findByUserAndRunDate(user, request.getRunDate())
 				.ifPresent(existing -> {
-					throw new IllegalArgumentException("해당 날짜에 이미 다른 기록이 존재합니다.");
+					throw new ConflictException("해당 날짜에 이미 다른 기록이 존재합니다.");
 				});
 		}
 
@@ -133,10 +137,10 @@ public class RecordService {
 		User user = findUserByEmail(email);
 
 		TrainingRecord record = recordRepository.findById(recordId)
-			.orElseThrow(() -> new IllegalArgumentException("기록을 찾을 수 없습니다."));
+			.orElseThrow(() -> new ResourceNotFoundException("기록을 찾을 수 없습니다."));
 
 		if (!record.getUser().getId().equals(user.getId())) {
-			throw new IllegalArgumentException("본인의 기록만 삭제할 수 있습니다.");
+			throw new ForbiddenException("본인의 기록만 삭제할 수 있습니다.");
 		}
 
 		List<AiFeedback> relatedFeedbacks = feedbackRepository.findByTrainingRecordId(recordId);
@@ -363,6 +367,6 @@ public class RecordService {
 
 	private User findUserByEmail(String email) {
 		return userRepository.findByEmail(email)
-			.orElseThrow(() -> new IllegalArgumentException("유저를 찾을 수 없습니다."));
+			.orElseThrow(() -> new ResourceNotFoundException("유저를 찾을 수 없습니다."));
 	}
 }
