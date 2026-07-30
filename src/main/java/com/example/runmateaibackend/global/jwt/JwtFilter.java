@@ -39,6 +39,14 @@ public class JwtFilter extends OncePerRequestFilter {
 			// 4. 이메일로 유저 정보 조회
 			UserDetails userDetails = userDetailsService.loadUserByUsername(email);
 
+			// 4-1. 토큰 발급 이후 관리자가 계정을 잠갔을 수 있으므로 매 요청마다 재확인한다.
+			// 잠긴 계정이면 인증 객체를 세팅하지 않아, 이후 인가 단계에서 인증되지 않은
+			// 요청으로 처리되어 401로 거부된다 (JwtAuthenticationEntryPoint가 응답).
+			if (!userDetails.isAccountNonLocked()) {
+				filterChain.doFilter(request, response);
+				return;
+			}
+
 			// 5. 인증 객체 생성 후 SecurityContext에 저장
 			// → 이후 Controller에서 인증된 유저 정보 사용 가능
 			UsernamePasswordAuthenticationToken authentication =

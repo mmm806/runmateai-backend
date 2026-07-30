@@ -20,11 +20,11 @@ import com.example.runmateaibackend.domain.user.repository.RefreshTokenRepositor
 import com.example.runmateaibackend.domain.user.repository.UserProfileRepository;
 import com.example.runmateaibackend.domain.user.repository.UserRepository;
 import com.example.runmateaibackend.global.jwt.JwtUtil;
+
 import com.example.runmateaibackend.global.exception.ConflictException;
 import com.example.runmateaibackend.global.exception.ForbiddenException;
 import com.example.runmateaibackend.global.exception.ResourceNotFoundException;
 import com.example.runmateaibackend.global.exception.UnauthorizedException;
-
 import lombok.RequiredArgsConstructor;
 
 @Service
@@ -72,6 +72,10 @@ public class AuthService {
 		// 비밀번호 일치 확인
 		if (!passwordEncoder.matches(request.getPassword(), user.getPassword())) {
 			throw new UnauthorizedException("이메일 또는 비밀번호가 올바르지 않습니다.");
+		}
+		
+		if (user.isLocked()) {
+			throw new ForbiddenException("잠긴 계정입니다. 관리자에게 문의해주세요.");
 		}
 
 		// 액세스 토큰, 리프레시 토큰 생성
