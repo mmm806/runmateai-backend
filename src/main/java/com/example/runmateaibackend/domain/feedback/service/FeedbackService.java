@@ -14,6 +14,8 @@ import com.example.runmateaibackend.domain.record.repository.RecordRepository;
 import com.example.runmateaibackend.domain.user.entity.User;
 import com.example.runmateaibackend.domain.user.repository.UserRepository;
 import com.example.runmateaibackend.global.client.ClaudeApiClient;
+import com.example.runmateaibackend.global.exception.ConflictException;
+import com.example.runmateaibackend.global.exception.ResourceNotFoundException;
 
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
@@ -45,20 +47,20 @@ public class FeedbackService {
 	public FeedbackResponse createFeedback(String email, Long recordId) {
 
 		User user = userRepository.findByEmail(email)
-			.orElseThrow(() -> new IllegalArgumentException("유저를 찾을 수 없습니다."));
+			.orElseThrow(() -> new ResourceNotFoundException("유저를 찾을 수 없습니다."));
 
 		TrainingRecord targetRecord = recordRepository.findById(recordId)
-			.orElseThrow(() -> new IllegalArgumentException("기록을 찾을 수 없습니다."));
+			.orElseThrow(() -> new ResourceNotFoundException("기록을 찾을 수 없습니다."));
 
 		// 이미 이 기록에 대한 피드백이 있으면 차단 (중복 요청 방지)
 		if (!feedbackRepository.findByTrainingRecordId(recordId).isEmpty()) {
-			throw new IllegalArgumentException("이미 이 기록에 대한 피드백이 존재합니다.");
+			throw new ConflictException("이미 이 기록에 대한 피드백이 존재합니다.");
 		}
 
 		List<TrainingRecord> recentRecords = recordRepository.findTop5ByUserOrderByRunDateDesc(user);
 
 		TrainingPlan activePlan = planRepository.findFirstByUserAndIsActiveOrderByCreatedAtDesc(user, true)
-			.orElseThrow(() -> new IllegalArgumentException("활성화된 플랜이 없습니다."));
+			.orElseThrow(() -> new ResourceNotFoundException("활성화된 플랜이 없습니다."));
 
 		String prompt = feedbackPromptBuilder.build(targetRecord, recentRecords, activePlan);
 		AiFeedbackResult result = claudeApiClient.sendMessageAndParse(prompt, AiFeedbackResult.class);
@@ -146,7 +148,7 @@ public class FeedbackService {
 	public List<FeedbackResponse> getFeedbacks(String email) {
 
 		User user = userRepository.findByEmail(email)
-			.orElseThrow(() -> new IllegalArgumentException("유저를 찾을 수 없습니다."));
+			.orElseThrow(() -> new ResourceNotFoundException("유저를 찾을 수 없습니다."));
 
 		return feedbackRepository.findByUserOrderByCreatedAtDesc(user)
 			.stream()

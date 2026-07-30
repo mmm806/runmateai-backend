@@ -21,6 +21,7 @@ import com.example.runmateaibackend.domain.user.entity.UserProfile;
 import com.example.runmateaibackend.domain.user.repository.UserProfileRepository;
 import com.example.runmateaibackend.domain.user.repository.UserRepository;
 import com.example.runmateaibackend.global.client.ClaudeApiClient;
+import com.example.runmateaibackend.global.exception.ResourceNotFoundException;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -45,7 +46,7 @@ public class PlanService {
 	public PlanResponse createPlan(String email) {
 
 		User user = userRepository.findByEmail(email)
-			.orElseThrow(() -> new IllegalArgumentException("유저를 찾을 수 없습니다."));
+			.orElseThrow(() -> new ResourceNotFoundException("유저를 찾을 수 없습니다."));
 
 		Lock lock = userPlanLocks.computeIfAbsent(user.getId(), id -> new ReentrantLock());
 		lock.lock();
@@ -73,10 +74,10 @@ public class PlanService {
 	public PlanResponse getActivePlan(String email) {
 
 		User user = userRepository.findByEmail(email)
-			.orElseThrow(() -> new IllegalArgumentException("유저를 찾을 수 없습니다."));
+			.orElseThrow(() -> new ResourceNotFoundException("유저를 찾을 수 없습니다."));
 
 		TrainingPlan plan = planRepository.findFirstByUserAndIsActiveOrderByCreatedAtDesc(user, true)
-			.orElseThrow(() -> new IllegalArgumentException("활성화된 플랜이 없습니다."));
+			.orElseThrow(() -> new ResourceNotFoundException("활성화된 플랜이 없습니다."));
 
 		List<PlanDayProgressResponse> progress = planDayProgressRepository.findByTrainingPlan(plan)
 			.stream()
