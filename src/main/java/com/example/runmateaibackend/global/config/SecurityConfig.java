@@ -1,6 +1,7 @@
 package com.example.runmateaibackend.global.config;
 
 
+import com.example.runmateaibackend.global.jwt.JwtAccessDeniedHandler;
 import com.example.runmateaibackend.global.jwt.JwtAuthenticationEntryPoint;
 import com.example.runmateaibackend.global.jwt.JwtFilter;
 import com.example.runmateaibackend.global.jwt.JwtUtil;
@@ -37,6 +38,7 @@ public class SecurityConfig {
 	private final JwtUtil jwtUtil;
 	private final CustomUserDetailsService userDetailsService;
 	private final JwtAuthenticationEntryPoint jwtAuthenticationEntryPoint;
+	private final JwtAccessDeniedHandler jwtAccessDeniedHandler;
 
 	// 비밀번호 암호화 도구 (회원가입 시 비밀번호 해싱)
 	@Bean
@@ -64,15 +66,18 @@ public class SecurityConfig {
 			.sessionManagement(session ->
 				session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
 
-			// 인증 실패 시 처리할 핸들러 등록
-			.exceptionHandling(exception ->
-				exception.authenticationEntryPoint(jwtAuthenticationEntryPoint))
+			// 인증 실패(401) / 인가 실패(403) 처리할 핸들러 등록
+			.exceptionHandling(exception -> exception
+				.authenticationEntryPoint(jwtAuthenticationEntryPoint)
+				.accessDeniedHandler(jwtAccessDeniedHandler))
 
 			// API별 접근 권한 설정
 			.authorizeHttpRequests(auth -> auth
 				// 회원가입, 로그인은 인증 없이 접근 가능
 				.requestMatchers("/api/auth/signup", "/api/auth/login", "/api/auth/reissue").permitAll()
 				.requestMatchers("/swagger-ui/**", "/v3/api-docs/**", "/swagger-ui.html").permitAll()
+				// 관리자 전용 API
+				.requestMatchers("/api/admin/**").hasRole("ADMIN")
 				// 그 외 모든 요청은 인증 필요
 				.anyRequest().authenticated()
 			)
