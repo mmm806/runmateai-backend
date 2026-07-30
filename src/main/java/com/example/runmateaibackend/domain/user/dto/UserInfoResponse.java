@@ -10,11 +10,13 @@ public class UserInfoResponse {
 
 	private String email;
 	private String name;
+	private String role;
 	private LocalDateTime createdAt;
 
 	public UserInfoResponse(User user) {
 		this.email = user.getEmail();
 		this.name = user.getName();
+		this.role = user.getRole().name();
 		this.createdAt = user.getCreatedAt();
 	}
 }
