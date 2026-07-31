@@ -12,9 +12,22 @@ spring:
       max-lifetime: ${DB_POOL_MAX_LIFETIME:1800000}
       leak-detection-threshold: ${DB_POOL_LEAK_THRESHOLD:60000}
 
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    # 이미 ddl-auto: update로 스키마가 만들어져 있는 운영 DB를 위한 설정.
+    # 스키마 이력 테이블(flyway_schema_history)이 없는 "비어있지 않은" DB에 처음 붙으면,
+    # V1(baseline-version)까지는 이미 적용된 것으로 간주하고 건너뛴 뒤 V2부터 실제로 실행한다.
+    # 반대로 완전히 빈 로컬/신규 DB에서는 이 옵션이 트리거되지 않고, V1부터 정상적으로 전부 실행된다.
+    baseline-on-migrate: true
+    baseline-version: 1
+
   jpa:
     hibernate:
-      ddl-auto: ${DDL_AUTO:update}
+      # Flyway 도입 이후: Hibernate가 스키마를 직접 바꾸지 않고, 엔티티와 실제 DB 스키마가
+      # 일치하는지 "검증"만 한다. 불일치 시 애플리케이션 시작 자체를 막아, 마이그레이션
+      # 파일 추가를 깜빡한 배포를 실행 전에 잡아낸다.
+      ddl-auto: ${DDL_AUTO:validate}
     show-sql: ${SHOW_SQL:false}
     properties:
       hibernate:
