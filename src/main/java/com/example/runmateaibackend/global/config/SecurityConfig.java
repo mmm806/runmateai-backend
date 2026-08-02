@@ -76,6 +76,8 @@ public class SecurityConfig {
 				// 회원가입, 로그인은 인증 없이 접근 가능
 				.requestMatchers("/api/auth/signup", "/api/auth/login", "/api/auth/reissue").permitAll()
 				.requestMatchers("/swagger-ui/**", "/v3/api-docs/**", "/swagger-ui.html").permitAll()
+				// Docker/로드밸런서 헬스체크용 - 인증 없이 접근 가능해야 함
+				.requestMatchers("/actuator/health").permitAll()
 				// 관리자 전용 API
 				.requestMatchers("/api/admin/**").hasRole("ADMIN")
 				// 그 외 모든 요청은 인증 필요
