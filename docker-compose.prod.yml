@@ -35,7 +35,6 @@ services:
       DB_URL: jdbc:postgresql://db:5432/runmateai
       DB_USERNAME: postgres
       DB_PASSWORD: ${DB_PASSWORD}
-      DDL_AUTO: update
       SHOW_SQL: "false"
       JWT_SECRET: ${JWT_SECRET}
       CLAUDE_API_KEY: ${CLAUDE_API_KEY}
