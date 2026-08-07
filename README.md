@@ -7,7 +7,7 @@ AI가 러닝 기록을 분석해 훈련 플랜을 자동으로 생성하고, 기
 **📝 트러블슈팅 & 성능 개선 기록**: https://app.notion.com/p/38864982b5af80a6b84fc5ee63f31e1b?source=copy_link
 
 ---
-![Runmate AI](./docs/images/runmateai.png)
+![Runmate AI](./docs/images/runmateAi.png)
 ## 목차
 
 - [주요 기능](#주요-기능)
