@@ -1,0 +1,30 @@
+# 테스트 전용 설정.
+# 메인 application.yml의 JWT_SECRET, CLAUDE_API_KEY는 기본값이 없어(운영 환경에서
+# 반드시 명시적으로 넣도록 강제하는 의도) 테스트 실행 시에는 여기서 더미 값을 채워준다.
+# 테스트 클래스패스에서는 이 파일이 src/main/resources/application.yml보다 우선 적용된다.
+
+spring:
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+
+jwt:
+  secret: test-only-secret-key-please-do-not-use-in-production-must-be-at-least-64-bytes-long-for-hs512
+  access-expiration: 1800000
+  refresh-expiration: 1209600000
+
+claude:
+  api:
+    key: test-dummy-claude-api-key
+    url: https://api.anthropic.com/v1/messages
+    model: claude-sonnet-4-6
+
+cors:
+  allowed-origins: http://localhost:5173
+
+springdoc:
+  swagger-ui:
+    enabled: false
+  api-docs:
+    enabled: false
