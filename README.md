@@ -139,5 +139,5 @@ src/main/java/com/example/runmateaibackend/
     └── db/migration/  # Flyway 마이그레이션 파일
 ```
 
----
+
 
