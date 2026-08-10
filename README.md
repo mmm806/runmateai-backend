@@ -1,5 +1,10 @@
 # RunMate AI
 
+[![CI/CD](https://github.com/mmm806/runmateai-backend/actions/workflows/deploy.yml/badge.svg)](https://github.com/mmm806/runmateai-backend/actions/workflows/deploy.yml)
+![Coverage](https://img.shields.io/badge/coverage-73%25-brightgreen)
+![Java](https://img.shields.io/badge/Java-17-blue)
+![Spring Boot](https://img.shields.io/badge/Spring%20Boot-4.1.0-brightgreen)
+
 AI가 러닝 기록을 분석해 훈련 플랜을 자동으로 생성하고, 기록이 쌓일 때마다 코칭 피드백과 함께 플랜을 조정해주는 AI 러닝 코칭 서비스입니다.
 
 **🔗 Live Demo**: https://d32emmykc8fvd6.cloudfront.net  
@@ -15,6 +20,7 @@ AI가 러닝 기록을 분석해 훈련 플랜을 자동으로 생성하고, 기
 - [아키텍처](#아키텍처)
 - [ERD](#erd)
 - [트러블슈팅 & 성능 개선](#트러블슈팅--성능-개선)
+- [테스트](#테스트)
 - [로컬 실행 방법](#로컬-실행-방법)
 - [프로젝트 구조](#프로젝트-구조)
 
@@ -43,7 +49,7 @@ AI가 러닝 기록을 분석해 훈련 플랜을 자동으로 생성하고, 기
 
 ![인프라 구조도](./docs/images/architecture.png)
 
-- **배포**: GitHub Actions로 main 브랜치 push 시 자동 배포. 백엔드는 Docker 이미지 빌드 → GHCR push → EC2가 pull 받아 재배포하며, 배포 마지막에 `/actuator/health` 헬스체크를 폴링해 정상 기동을 확인한 뒤에만 배포를 성공 처리한다. 프론트엔드는 `npm build` → S3 업로드 → CloudFront 캐시 무효화로 배포된다.
+- **배포**: GitHub Actions로 main 브랜치 push 시 자동 배포. **테스트가 먼저 실행되어 통과해야만** 이후 Docker 이미지 빌드 단계로 넘어가며(테스트 실패 시 배포 자체가 중단됨), 백엔드는 Docker 이미지 빌드 → GHCR push → EC2가 pull 받아 재배포하며, 배포 마지막에 `/actuator/health` 헬스체크를 폴링해 정상 기동을 확인한 뒤에만 배포를 성공 처리한다. 프론트엔드는 `npm build` → S3 업로드 → CloudFront 캐시 무효화로 배포된다.
 - **DB 스키마 관리**: 초기에는 `ddl-auto: update`에 의존해 스키마 변경 이력이 코드로 추적되지 않았고, 실제로 유니크 인덱스가 이력 없이 유실되는 사고로 이어졌다. 이후 Flyway를 도입해 모든 스키마 변경을 버전 관리하고, `ddl-auto`는 `validate`로 전환해 엔티티와 실제 스키마가 어긋나면 배포 자체가 실패하도록 안전장치를 마련했다.
 - **커넥션 관리**: HikariCP 풀 크기를 t3.micro(RAM 1GB) 환경에 맞게 실측 기반으로 조정했고, 외부 API(Claude) 호출을 DB 트랜잭션 밖으로 분리해 커넥션 점유 시간을 최소화했다.
 
@@ -65,6 +71,26 @@ AI가 러닝 기록을 분석해 훈련 플랜을 자동으로 생성하고, 기
 | Flyway 도입 | `ddl-auto: update` 의존으로 인해 스키마 변경 이력이 추적되지 않던 문제를 해결, 이후 모든 스키마 변경을 버전 관리 |
 | CI/CD 배포 신뢰성 개선 | 배포 스크립트가 실패해도 "성공"으로 표시되던 문제를 발견해 수정, 배포 후 헬스체크 검증 단계 추가 |
 | 관리자 기능 (역할 기반 접근 제어) | Role/계정 잠금 필드 설계, `/api/admin/**` 경로 보호, 인증(401)/인가(403) 응답 포맷 통일 |
+
+
+## 테스트
+
+![테스트 커버리지](./docs/images/test.png)
+서비스 레이어 핵심 로직과 JWT 인증/인가 필터 체인을 중심으로 단위 테스트를 작성했습니다. 매 단계 JaCoCo로 실측하며 다음 우선순위를 정하는 방식으로 진행했습니다.
+
+| 항목 | 내용 |
+| --- | --- |
+| 라인/인스트럭션 커버리지 | 21% → **73%** |
+| 브랜치 커버리지 | 26% → **75%** |
+| 도구 | JUnit 5, Mockito, Testcontainers(PostgreSQL), JaCoCo |
+
+**설계에서 신경 쓴 부분**
+- 순수 로직(JSON 파싱, 플랜 병합 등)은 목(mock) 대신 실제 객체를 사용해, 목으로 위장된 "가짜 통과"를 방지
+- 실행 순서가 중요한 로직(저장 → flush → 후속 처리)은 `Mockito.inOrder()`로 순서 자체를 검증
+- `protected` 메서드(서블릿 필터)는 `ReflectionTestUtils`로 직접 호출해 불필요한 프레임워크 부가 로직 없이 순수 검증
+- 동시 요청 시 활성 플랜 중복 생성 버그는 Testcontainers 기반 실제 PostgreSQL 통합 테스트로 재현/검증해, 락 로직이 실수로 제거되면 즉시 실패하도록 안전망 구성
+- 배포 파이프라인에 테스트 게이트를 추가해, 테스트가 실패하면 빌드·배포 자체가 진행되지 않도록 함
+
 
 ## 로컬 실행 방법
 
@@ -94,7 +120,6 @@ docker compose up -d
 
 ### 5. API 문서 확인
 로컬 실행 후 http://localhost:8080/swagger-ui.html 에서 전체 API 명세를 확인할 수 있습니다.
-
 ## 프로젝트 구조
 
 ```
@@ -116,4 +141,3 @@ src/main/java/com/example/runmateaibackend/
 
 ---
 
-*이 문서는 프로젝트가 진행됨에 따라 계속 업데이트됩니다.*
