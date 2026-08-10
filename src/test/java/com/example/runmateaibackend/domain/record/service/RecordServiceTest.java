@@ -3,12 +3,16 @@ package com.example.runmateaibackend.domain.record.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.YearMonth;
 import java.util.List;
 import java.util.Optional;
 
@@ -21,14 +25,18 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 import com.example.runmateaibackend.domain.feedback.entity.AiFeedback;
 import com.example.runmateaibackend.domain.feedback.repository.FeedbackRepository;
+import com.example.runmateaibackend.domain.plan.entity.TrainingPlan;
 import com.example.runmateaibackend.domain.plan.repository.PlanRepository;
 import com.example.runmateaibackend.domain.plan.service.PlanService;
 import com.example.runmateaibackend.domain.record.dto.RecordRequest;
 import com.example.runmateaibackend.domain.record.dto.RecordResponse;
+import com.example.runmateaibackend.domain.record.dto.RecordStatsProjection;
+import com.example.runmateaibackend.domain.record.dto.RecordStatsResponse;
 import com.example.runmateaibackend.domain.record.entity.TrainingRecord;
 import com.example.runmateaibackend.domain.record.repository.RecordRepository;
 import com.example.runmateaibackend.domain.user.entity.Role;
 import com.example.runmateaibackend.domain.user.entity.User;
+import com.example.runmateaibackend.domain.user.entity.UserProfile;
 import com.example.runmateaibackend.domain.user.repository.UserProfileRepository;
 import com.example.runmateaibackend.domain.user.repository.UserRepository;
 import com.example.runmateaibackend.global.exception.ConflictException;
@@ -261,5 +269,220 @@ class RecordServiceTest {
 		assertThatThrownBy(() -> recordService.getRecordByDate("user6@runmateai.com", date))
 			.isInstanceOf(ResourceNotFoundException.class)
 			.hasMessage("해당 날짜에 기록이 없습니다.");
+	}
+
+	@Test
+	@DisplayName("기록 삭제로 인한 플랜 재조정 시, 마지막 플랜 갱신 피드백이 있으면 " +
+		"그 피드백에 연결된 플랜을 재활성화한다 (가장 오래된 플랜으로 폴백하는 분기는 타지 않는다)")
+	void deleteRecord_revertToLatestPlanUpdate_reactivatesPlanFromLatestFeedback() {
+		User user = buildUser(90L, "user7@runmateai.com");
+		TrainingRecord myRecord = TrainingRecord.builder()
+			.id(600L).user(user).runDate(LocalDate.of(2026, 8, 1)).build();
+
+		AiFeedback deletedRecordFeedback = AiFeedback.builder().planUpdated(true).build();
+
+		TrainingPlan currentActivePlan = TrainingPlan.builder()
+			.id(1L).user(user).planData("{}").goalType("FIVE_K")
+			.startDate(LocalDate.of(2026, 7, 1)).isActive(true).build();
+		TrainingPlan planToReactivate = TrainingPlan.builder()
+			.id(2L).user(user).planData("{}").goalType("FIVE_K")
+			.startDate(LocalDate.of(2026, 6, 1)).isActive(false).build();
+		AiFeedback latestPlanUpdateFeedback = AiFeedback.builder()
+			.planUpdated(true).trainingPlan(planToReactivate).build();
+
+		when(userRepository.findByEmail("user7@runmateai.com")).thenReturn(Optional.of(user));
+		when(recordRepository.findById(600L)).thenReturn(Optional.of(myRecord));
+		when(feedbackRepository.findByTrainingRecordId(600L)).thenReturn(List.of(deletedRecordFeedback));
+		when(planRepository.findFirstByUserAndIsActiveOrderByCreatedAtDesc(user, true))
+			.thenReturn(Optional.of(currentActivePlan));
+		when(feedbackRepository.findByUserOrderByCreatedAtDesc(user)).thenReturn(List.of(latestPlanUpdateFeedback));
+
+		recordService.deleteRecord("user7@runmateai.com", 600L);
+
+		assertThat(currentActivePlan.isActive()).isFalse(); // 기존 활성 플랜은 비활성화된다.
+		assertThat(planToReactivate.isActive()).isTrue();  // 마지막 갱신 피드백에 연결된 플랜이 재활성화된다.
+		// "마지막 갱신 피드백이 없는 경우"의 폴백 분기(가장 오래된 플랜 재활성화)는 타지 않아야 한다.
+		verify(planRepository, never()).findFirstByUserOrderByCreatedAtAsc(any());
+	}
+
+	// ===== getStats =====
+
+	/**
+	 * getStats() 관련 테스트들이 공통으로 필요로 하는 리포지토리 목을 최소한으로 세팅한다.
+	 * 스트릭/증감률처럼 개별 테스트가 검증하려는 값만 파라미터로 받고,
+	 * 그 외 값은 lenient()로 느슨하게 스텁해서 "이 테스트가 실제로 검증하려는 게 무엇인지"를
+	 * 각 테스트 본문에서 뚜렷하게 드러나게 했다.
+	 */
+	private void stubMinimalStatsMocks(User user, List<LocalDate> runDates,
+		BigDecimal thisMonthDistance, BigDecimal lastMonthDistance) {
+
+		RecordStatsProjection projection = mock(RecordStatsProjection.class);
+		lenient().when(projection.getTotalRuns()).thenReturn(5L);
+		lenient().when(projection.getTotalDistance()).thenReturn(BigDecimal.valueOf(25));
+		lenient().when(projection.getTotalDuration()).thenReturn(140L);
+		lenient().when(projection.getLongestDistance()).thenReturn(BigDecimal.valueOf(8));
+		lenient().when(projection.getLongestDuration()).thenReturn(40);
+		lenient().when(projection.getAvgHeartRate()).thenReturn(150.0);
+		lenient().when(projection.getTotalCalories()).thenReturn(1200L);
+		lenient().when(projection.getTotalElevationGain()).thenReturn(300L);
+
+		YearMonth thisMonth = YearMonth.now();
+		YearMonth lastMonth = thisMonth.minusMonths(1);
+
+		lenient().when(recordRepository.countByUser(user)).thenReturn(5L);
+		lenient().when(recordRepository.findAggregatedStatsByUser(user)).thenReturn(projection);
+		lenient().when(recordRepository.countByFeeling(user)).thenReturn(List.of());
+		lenient().when(recordRepository.sumDistanceByUserAndMonth(user, thisMonth.getYear(), thisMonth.getMonthValue()))
+			.thenReturn(thisMonthDistance);
+		lenient().when(recordRepository.sumDistanceByUserAndMonth(user, lastMonth.getYear(), lastMonth.getMonthValue()))
+			.thenReturn(lastMonthDistance);
+		lenient().when(recordRepository.findRunDatesByUser(user)).thenReturn(runDates);
+		lenient().when(recordRepository.findBestPaceRecordByUserId(user.getId())).thenReturn(Optional.empty());
+		lenient().when(feedbackRepository.countByUserAndPlanUpdatedTrue(user)).thenReturn(2L);
+		lenient().when(recordRepository.findFirstByUserAndDistanceKmBetweenOrderByDurationMinAsc(eq(user), any(), any()))
+			.thenReturn(Optional.empty());
+		lenient().when(userProfileRepository.findByUser(user)).thenReturn(Optional.empty());
+	}
+
+	@Test
+	@DisplayName("기록이 하나도 없는 유저는 예외 대신 0으로 채워진 빈 통계를 받는다")
+	void getStats_noRecords_noProfile_returnsEmptyStats() {
+		User user = buildUser(100L, "stats1@runmateai.com");
+		when(userRepository.findByEmail("stats1@runmateai.com")).thenReturn(Optional.of(user));
+		when(recordRepository.countByUser(user)).thenReturn(0L);
+		when(userProfileRepository.findByUser(user)).thenReturn(Optional.empty());
+
+		RecordStatsResponse response = recordService.getStats("stats1@runmateai.com");
+
+		assertThat(response.getTotalRuns()).isZero();
+		assertThat(response.getTotalDistanceKm()).isEqualByComparingTo(BigDecimal.ZERO);
+		assertThat(response.getAvgPace()).isEqualTo("-");
+		assertThat(response.getFeelingDistribution()).isEmpty();
+		assertThat(response.getMonthlyGoalKm()).isNull();
+		assertThat(response.getMonthlyGoalProgressPercent()).isNull();
+		// 기록이 없으면 무거운 집계 쿼리 자체를 호출하지 않아야 한다 (빈 결과를 만들려고 DB를 두드릴 필요는 없다).
+		verify(recordRepository, never()).findAggregatedStatsByUser(any());
+	}
+
+	@Test
+	@DisplayName("기록은 없지만 프로필의 월간 목표가 등록되어 있으면, 목표값은 채우고 진행률은 0으로 반환한다")
+	void getStats_noRecords_withProfile_returnsMonthlyGoalWithZeroProgress() {
+		User user = buildUser(101L, "stats2@runmateai.com");
+		UserProfile profile = UserProfile.builder().user(user).monthlyGoalKm(BigDecimal.valueOf(50)).build();
+
+		when(userRepository.findByEmail("stats2@runmateai.com")).thenReturn(Optional.of(user));
+		when(recordRepository.countByUser(user)).thenReturn(0L);
+		when(userProfileRepository.findByUser(user)).thenReturn(Optional.of(profile));
+
+		RecordStatsResponse response = recordService.getStats("stats2@runmateai.com");
+
+		assertThat(response.getMonthlyGoalKm()).isEqualByComparingTo(BigDecimal.valueOf(50));
+		assertThat(response.getMonthlyGoalProgressPercent()).isEqualByComparingTo(BigDecimal.ZERO);
+	}
+
+	@Test
+	@DisplayName("기록이 있는 유저의 통계를 조회하면, 집계 쿼리 결과를 기반으로 모든 필드를 계산해 반환한다")
+	void getStats_withRecords_computesAggregatedStats() {
+		User user = buildUser(102L, "stats3@runmateai.com");
+
+		RecordStatsProjection projection = mock(RecordStatsProjection.class);
+		when(projection.getTotalRuns()).thenReturn(5L);
+		when(projection.getTotalDistance()).thenReturn(BigDecimal.valueOf(25));
+		when(projection.getTotalDuration()).thenReturn(140L);
+		when(projection.getLongestDistance()).thenReturn(BigDecimal.valueOf(8));
+		when(projection.getLongestDuration()).thenReturn(40);
+		when(projection.getAvgHeartRate()).thenReturn(150.0);
+		when(projection.getTotalCalories()).thenReturn(1200L);
+		when(projection.getTotalElevationGain()).thenReturn(300L);
+
+		YearMonth thisMonth = YearMonth.now();
+		YearMonth lastMonth = thisMonth.minusMonths(1);
+
+		when(userRepository.findByEmail("stats3@runmateai.com")).thenReturn(Optional.of(user));
+		when(recordRepository.countByUser(user)).thenReturn(5L);
+		when(recordRepository.findAggregatedStatsByUser(user)).thenReturn(projection);
+		when(recordRepository.countByFeeling(user)).thenReturn(
+			List.of(new Object[] { "good", 3L }, new Object[] { "tired", 2L })
+		);
+		when(recordRepository.sumDistanceByUserAndMonth(user, thisMonth.getYear(), thisMonth.getMonthValue()))
+			.thenReturn(BigDecimal.valueOf(15));
+		when(recordRepository.sumDistanceByUserAndMonth(user, lastMonth.getYear(), lastMonth.getMonthValue()))
+			.thenReturn(BigDecimal.valueOf(10));
+		when(recordRepository.findRunDatesByUser(user)).thenReturn(List.of(LocalDate.now()));
+		when(recordRepository.findBestPaceRecordByUserId(user.getId())).thenReturn(Optional.empty());
+		when(feedbackRepository.countByUserAndPlanUpdatedTrue(user)).thenReturn(2L);
+		when(recordRepository.findFirstByUserAndDistanceKmBetweenOrderByDurationMinAsc(eq(user), any(), any()))
+			.thenReturn(Optional.empty());
+		when(userProfileRepository.findByUser(user)).thenReturn(
+			Optional.of(UserProfile.builder().user(user).monthlyGoalKm(BigDecimal.valueOf(100)).build())
+		);
+
+		RecordStatsResponse response = recordService.getStats("stats3@runmateai.com");
+
+		assertThat(response.getTotalRuns()).isEqualTo(5);
+		assertThat(response.getTotalDistanceKm()).isEqualByComparingTo(BigDecimal.valueOf(25));
+		assertThat(response.getTotalDurationMin()).isEqualTo(140);
+		assertThat(response.getAvgPace()).isEqualTo("5'36\""); // 140분 / 25km = 5.6분/km
+		assertThat(response.getLongestDistanceKm()).isEqualByComparingTo(BigDecimal.valueOf(8));
+		assertThat(response.getBestPace()).isEqualTo("-"); // 최고 페이스 기록 없음
+		assertThat(response.getLongestDurationMin()).isEqualTo(40);
+		assertThat(response.getFeelingDistribution()).containsEntry("good", 3).containsEntry("tired", 2);
+		assertThat(response.getTotalPlanUpdates()).isEqualTo(2);
+		assertThat(response.getThisMonthDistanceKm()).isEqualByComparingTo(BigDecimal.valueOf(15));
+		assertThat(response.getLastMonthDistanceKm()).isEqualByComparingTo(BigDecimal.valueOf(10));
+		assertThat(response.getDistanceChangePercent()).isEqualTo(50.0); // (15-10)/10 * 100
+		assertThat(response.getAvgHeartRate()).isEqualTo(150);
+		assertThat(response.getTotalCalories()).isEqualTo(1200);
+		assertThat(response.getMonthlyGoalKm()).isEqualByComparingTo(BigDecimal.valueOf(100));
+		assertThat(response.getMonthlyGoalProgressPercent()).isEqualByComparingTo(BigDecimal.valueOf(15)); // 15/100*100
+		assertThat(response.getBestRecordsByGoalType()).isEmpty();
+		assertThat(response.getTotalElevationGain()).isEqualTo(300);
+	}
+
+	@Test
+	@DisplayName("가장 최근 기록이 오늘 또는 어제이면서 연속으로 이어져 있으면, 그 연속 일수가 현재/최장 스트릭이 된다")
+	void getStats_streakEndingToday_currentStreakEqualsConsecutiveDays() {
+		User user = buildUser(103L, "stats4@runmateai.com");
+		LocalDate today = LocalDate.now();
+		List<LocalDate> threeConsecutiveDaysEndingToday = List.of(today, today.minusDays(1), today.minusDays(2));
+
+		when(userRepository.findByEmail("stats4@runmateai.com")).thenReturn(Optional.of(user));
+		stubMinimalStatsMocks(user, threeConsecutiveDaysEndingToday, BigDecimal.valueOf(15), BigDecimal.valueOf(10));
+
+		RecordStatsResponse response = recordService.getStats("stats4@runmateai.com");
+
+		assertThat(response.getCurrentStreak()).isEqualTo(3);
+		assertThat(response.getLongestStreak()).isEqualTo(3);
+	}
+
+	@Test
+	@DisplayName("가장 최근 기록이 오늘도 어제도 아니면, 과거에 연속 기록이 있었어도 현재 스트릭은 0이다")
+	void getStats_streakNotEndingToday_currentStreakIsZero() {
+		User user = buildUser(104L, "stats5@runmateai.com");
+		LocalDate today = LocalDate.now();
+		List<LocalDate> threeConsecutiveDaysThreeDaysAgo = List.of(
+			today.minusDays(3), today.minusDays(4), today.minusDays(5)
+		);
+
+		when(userRepository.findByEmail("stats5@runmateai.com")).thenReturn(Optional.of(user));
+		stubMinimalStatsMocks(user, threeConsecutiveDaysThreeDaysAgo, BigDecimal.valueOf(15), BigDecimal.valueOf(10));
+
+		RecordStatsResponse response = recordService.getStats("stats5@runmateai.com");
+
+		assertThat(response.getCurrentStreak()).isZero();
+		assertThat(response.getLongestStreak()).isEqualTo(3); // 최장 스트릭 자체는 과거 기록 기준으로 유지된다.
+	}
+
+	@Test
+	@DisplayName("지난달 누적 거리가 0이면, 0으로 나누는 대신 증감률을 null로 반환한다")
+	void getStats_lastMonthDistanceZero_distanceChangePercentIsNull() {
+		User user = buildUser(105L, "stats6@runmateai.com");
+
+		when(userRepository.findByEmail("stats6@runmateai.com")).thenReturn(Optional.of(user));
+		stubMinimalStatsMocks(user, List.of(LocalDate.now()), BigDecimal.valueOf(15), BigDecimal.ZERO);
+
+		RecordStatsResponse response = recordService.getStats("stats6@runmateai.com");
+
+		assertThat(response.getDistanceChangePercent()).isNull();
 	}
 }
